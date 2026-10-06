@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../app/router.dart';
@@ -9,42 +10,77 @@ import '../../../app/theme/app_typography.dart';
 import '../../../core/domain/quincena.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../core/widgets/animated_amount.dart';
+import '../../../core/widgets/async_reveal.dart';
 import '../../../core/widgets/empty_state.dart';
 import '../../../core/widgets/pressable.dart';
 import '../../../core/widgets/section_header.dart';
+import '../../../core/widgets/skeleton.dart';
+import '../../categories/domain/category.dart';
+import '../../categories/presentation/category_providers.dart';
+import '../../transactions/domain/movement.dart';
+import '../../transactions/domain/period_summary.dart';
+import '../../transactions/presentation/movement_providers.dart';
 import '../../transactions/presentation/quick_add_sheet.dart';
+import '../../transactions/presentation/widgets/movement_tile.dart';
 
-class DashboardScreen extends StatelessWidget {
+class DashboardScreen extends ConsumerWidget {
   const DashboardScreen({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final now = DateTime.now();
     final quincena = Quincena.of(now);
+    final summary = ref.watch(currentQuincenaMovementsProvider).whenData(PeriodSummary.of);
+    final recent = ref.watch(recentMovementsProvider);
+    final categories = ref.watch(categoriesByIdProvider).value ?? const <int, Category>{};
 
     final sections = <Widget>[
       _Header(now: now),
-      _BalanceCard(quincena: quincena, now: now),
-      _PrimaryActions(onAdd: () => showQuickAddSheet(context)),
+      AsyncReveal<PeriodSummary>(
+        value: summary,
+        skeleton: const _Padded(child: Skeleton(height: 214, radius: AppRadius.lg)),
+        builder: (s) => _BalanceCard(quincena: quincena, now: now, summary: s),
+      ),
+      const _PrimaryActions(),
       SectionHeader(
         title: 'Próximo pago',
         actionLabel: 'Tarjetas',
         onAction: () => context.go(AppRoutes.cards),
       ),
       _NextPaymentPlaceholder(onTap: () => context.go(AppRoutes.cards)),
-      const SectionHeader(title: 'Últimos movimientos'),
+      SectionHeader(
+        title: 'Últimos movimientos',
+        actionLabel: 'Ver todos',
+        onAction: () => context.go(AppRoutes.transactions),
+      ),
       _Padded(
         child: Card(
-          child: SizedBox(
-            width: double.infinity,
-            child: EmptyState(
-              compact: true,
-              icon: Icons.receipt_long_rounded,
-              title: 'Aún no hay movimientos',
-              message: 'Registra tu primer gasto o ingreso en segundos.',
-              actionLabel: 'Agregar movimiento',
-              onAction: () => showQuickAddSheet(context),
-            ),
+          child: AsyncReveal<List<Movement>>(
+            value: recent,
+            skeleton: const SkeletonList(count: 3),
+            builder: (list) => list.isEmpty
+                ? SizedBox(
+                    width: double.infinity,
+                    child: EmptyState(
+                      compact: true,
+                      icon: Icons.receipt_long_rounded,
+                      title: 'Aún no hay movimientos',
+                      message: 'Registra tu primer gasto o ingreso en segundos.',
+                      actionLabel: 'Agregar movimiento',
+                      onAction: () => showQuickAddSheet(context),
+                    ),
+                  )
+                : Column(
+                    children: [
+                      for (final m in list)
+                        MovementTile(
+                          key: ValueKey(m.id),
+                          movement: m,
+                          category: categories[m.categoryId],
+                          onTap: () => showQuickAddSheet(context, editing: m),
+                        ).animate().fadeIn(duration: AppDurations.medium).slideX(begin: 0.04),
+                    ],
+                  ),
           ),
         ),
       ),
@@ -125,15 +161,17 @@ class _Header extends StatelessWidget {
 /// Saldo disponible de la quincena con la barra de gastado contra el límite.
 /// Los montos se conectan a datos reales en las fases 2 (movimientos) y 5 (presupuesto).
 class _BalanceCard extends StatelessWidget {
-  const _BalanceCard({required this.quincena, required this.now});
+  const _BalanceCard({required this.quincena, required this.now, required this.summary});
 
   final Quincena quincena;
   final DateTime now;
+  final PeriodSummary summary;
 
   @override
   Widget build(BuildContext context) {
-    const available = 0;
-    const spent = 0;
+    final available = summary.balanceCents;
+    final spent = summary.expenseCents;
+    // El límite de presupuesto llega en la Fase 5.
     const int? limit = null;
     final progress = limit == null || limit == 0 ? 0.0 : (spent / limit).clamp(0.0, 1.0);
     final daysLeft = quincena.daysLeft(now);
@@ -158,7 +196,10 @@ class _BalanceCard extends StatelessWidget {
                 alignment: Alignment.centerLeft,
                 child: AnimatedAmount(
                   cents: available,
-                  style: AppTypography.amount(44, color: context.scheme.onSurface),
+                  style: AppTypography.amount(
+                    44,
+                    color: available < 0 ? context.colors.expense : context.scheme.onSurface,
+                  ),
                 ),
               ),
               const SizedBox(height: AppSpacing.md),
@@ -185,9 +226,25 @@ class _BalanceCard extends StatelessWidget {
                 ],
               ),
               const SizedBox(height: AppSpacing.sm),
-              _Pill(
-                icon: Icons.hourglass_bottom_rounded,
-                label: daysLeft == 1 ? 'Último día de la quincena' : '$daysLeft días restantes',
+              Wrap(
+                spacing: AppSpacing.xs,
+                runSpacing: AppSpacing.xs,
+                children: [
+                  _Pill(
+                    icon: Icons.hourglass_bottom_rounded,
+                    label: daysLeft == 1 ? 'Último día de la quincena' : '$daysLeft días restantes',
+                  ),
+                  if (summary.incomeCents > 0)
+                    _Pill(
+                      icon: Icons.south_west_rounded,
+                      label: 'Ingresos ${Formatters.moneyRounded(summary.incomeCents)}',
+                    ),
+                  if (summary.unexpectedCents > 0)
+                    _Pill(
+                      icon: Icons.bolt_rounded,
+                      label: 'Imprevistos ${Formatters.moneyRounded(summary.unexpectedCents)}',
+                    ),
+                ],
               ),
             ],
           ),
@@ -224,9 +281,7 @@ class _Pill extends StatelessWidget {
 }
 
 class _PrimaryActions extends StatelessWidget {
-  const _PrimaryActions({required this.onAdd});
-
-  final VoidCallback onAdd;
+  const _PrimaryActions();
 
   @override
   Widget build(BuildContext context) {
@@ -235,11 +290,20 @@ class _PrimaryActions extends StatelessWidget {
       child: Row(
         children: [
           Expanded(
-            child: _ActionButton(icon: Icons.add_rounded, label: 'Gasto', filled: true, onTap: onAdd),
+            child: _ActionButton(
+              icon: Icons.add_rounded,
+              label: 'Gasto',
+              filled: true,
+              onTap: () => showQuickAddSheet(context),
+            ),
           ),
           const SizedBox(width: AppSpacing.sm),
           Expanded(
-            child: _ActionButton(icon: Icons.south_west_rounded, label: 'Ingreso', onTap: onAdd),
+            child: _ActionButton(
+              icon: Icons.south_west_rounded,
+              label: 'Ingreso',
+              onTap: () => showQuickAddSheet(context, kind: MovementKind.income),
+            ),
           ),
         ],
       ),

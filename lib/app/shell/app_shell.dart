@@ -85,11 +85,11 @@ class _Branch extends StatelessWidget {
           enabled: active,
           child: AnimatedOpacity(
             opacity: active ? 1 : 0,
-            duration: active ? duration : Duration.zero,
+            duration: duration,
             curve: AppCurves.standard,
             child: AnimatedScale(
               scale: active ? 1 : 0.98,
-              duration: active ? duration : Duration.zero,
+              duration: duration,
               curve: AppCurves.standard,
               child: child,
             ),

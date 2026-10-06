@@ -6,6 +6,7 @@ import 'package:intl/intl.dart';
 
 import 'app/app.dart';
 import 'core/database/app_database.dart';
+import 'features/recurring/data/recurring_repository.dart';
 import 'features/settings/data/drift_settings_repository.dart';
 import 'features/settings/domain/app_settings.dart';
 import 'features/settings/presentation/settings_controller.dart';
@@ -25,6 +26,13 @@ Future<void> main() async {
     // Si la base no se puede leer, la app abre con valores por defecto.
     debugPrint('No se pudieron leer los ajustes: $e\n$st');
     settings = const AppSettings();
+  }
+
+  try {
+    // Registra quincenas, rentas, etc. que vencieron mientras la app estuvo cerrada.
+    await RecurringRepository(db).generateDue(DateTime.now());
+  } catch (e, st) {
+    debugPrint('No se pudieron generar los recurrentes: $e\n$st');
   }
 
   runApp(

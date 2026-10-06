@@ -3,9 +3,11 @@ import 'package:go_router/go_router.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../features/cards/presentation/cards_screen.dart';
+import '../features/categories/presentation/categories_screen.dart';
 import '../features/dashboard/presentation/dashboard_screen.dart';
 import '../features/onboarding/presentation/onboarding_screen.dart';
 import '../features/onboarding/presentation/splash_screen.dart';
+import '../features/recurring/presentation/recurring_screen.dart';
 import '../features/reports/presentation/reports_screen.dart';
 import '../features/settings/presentation/more_screen.dart';
 import '../features/settings/presentation/settings_screen.dart';
@@ -24,6 +26,8 @@ abstract final class AppRoutes {
   static const reports = '/analisis';
   static const more = '/mas';
   static const settings = '/mas/ajustes';
+  static const categories = '/mas/categorias';
+  static const recurring = '/mas/recurrentes';
 }
 
 final _rootNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'root');
@@ -53,7 +57,11 @@ GoRouter router(Ref ref) {
         path: AppRoutes.more,
         parentNavigatorKey: _rootNavigatorKey,
         builder: (_, _) => const MoreScreen(),
-        routes: [GoRoute(path: 'ajustes', builder: (_, _) => const SettingsScreen())],
+        routes: [
+          GoRoute(path: 'ajustes', builder: (_, _) => const SettingsScreen()),
+          GoRoute(path: 'categorias', builder: (_, _) => const CategoriesScreen()),
+          GoRoute(path: 'recurrentes', builder: (_, _) => const RecurringScreen()),
+        ],
       ),
     ],
   );

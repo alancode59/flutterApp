@@ -16,8 +16,6 @@ class MoreScreen extends StatelessWidget {
     final planned = [
       (Icons.handshake_rounded, 'Deudas', 'Lo que debo y me deben', 4),
       (Icons.pie_chart_rounded, 'Presupuesto', 'Límite por quincena y categoría', 5),
-      (Icons.autorenew_rounded, 'Recurrentes', 'Suscripciones, renta y servicios', 2),
-      (Icons.category_rounded, 'Categorías', 'Íconos y colores personalizados', 2),
       (Icons.cloud_download_rounded, 'Respaldo', 'Exportar e importar tus datos', 7),
     ];
 
@@ -28,6 +26,23 @@ class MoreScreen extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: AppSpacing.page),
           sliver: SliverList.list(
             children: [
+              _Group(
+                children: [
+                  _MenuTile(
+                    icon: Icons.autorenew_rounded,
+                    title: 'Recurrentes',
+                    subtitle: 'Quincena, renta, servicios y suscripciones',
+                    onTap: () => context.push(AppRoutes.recurring),
+                  ),
+                  _MenuTile(
+                    icon: Icons.category_rounded,
+                    title: 'Categorías',
+                    subtitle: 'Íconos y colores personalizados',
+                    onTap: () => context.push(AppRoutes.categories),
+                  ),
+                ],
+              ),
+              const SizedBox(height: AppSpacing.md),
               _Group(
                 children: [
                   for (final (icon, title, subtitle, phase) in planned)

@@ -2,11 +2,14 @@ import 'package:drift/drift.dart';
 import 'package:drift_flutter/drift_flutter.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
+import '../../features/categories/domain/category_catalog.dart';
+import '../../features/recurring/domain/recurring_rule.dart';
+import '../../features/transactions/domain/movement.dart';
 import 'tables.dart';
 
 part 'app_database.g.dart';
 
-@DriftDatabase(tables: [SettingsEntries])
+@DriftDatabase(tables: [SettingsEntries, Categories, RecurringRules, Movements])
 class AppDatabase extends _$AppDatabase {
   /// Constructor para pruebas (por ejemplo `NativeDatabase.memory()`).
   AppDatabase(super.executor);
@@ -23,15 +26,34 @@ class AppDatabase extends _$AppDatabase {
       );
 
   @override
-  int get schemaVersion => 1;
+  int get schemaVersion => 2;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
-    onCreate: (m) => m.createAll(),
+    onCreate: (m) async {
+      await m.createAll();
+      await _seedCategories();
+    },
+    onUpgrade: (m, from, to) async {
+      if (from < 2) {
+        await m.createTable(categories);
+        await m.createTable(recurringRules);
+        await m.createTable(movements);
+        await m.createIndex(movementsDate);
+        await _seedCategories();
+      }
+    },
     beforeOpen: (details) async {
       await customStatement('PRAGMA foreign_keys = ON');
     },
   );
+
+  Future<void> _seedCategories() => batch((b) {
+    b.insertAll(categories, [
+      for (final (i, (name, icon, color, kind)) in CategoryCatalog.defaults.indexed)
+        CategoriesCompanion.insert(name: name, icon: icon, color: color, kind: kind, sortOrder: Value(i)),
+    ]);
+  });
 }
 
 /// Se abre en `main()` antes de pintar la app y se inyecta con un override.

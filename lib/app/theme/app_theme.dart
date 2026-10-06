@@ -141,17 +141,35 @@ abstract final class AppTheme {
         filled: true,
         fillColor: p.surfaceHigh,
         contentPadding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.md),
-        border: OutlineInputBorder(
+        // Subrayado sin línea: la etiqueta flotante queda dentro de la caja rellena.
+        border: UnderlineInputBorder(
           borderRadius: BorderRadius.circular(AppRadius.md),
           borderSide: BorderSide.none,
         ),
-        focusedBorder: OutlineInputBorder(
+        enabledBorder: UnderlineInputBorder(
           borderRadius: BorderRadius.circular(AppRadius.md),
-          borderSide: BorderSide(color: p.accent, width: 1.5),
+          borderSide: BorderSide.none,
         ),
-        errorBorder: OutlineInputBorder(
+        focusedBorder: UnderlineInputBorder(
           borderRadius: BorderRadius.circular(AppRadius.md),
-          borderSide: BorderSide(color: p.expense, width: 1.5),
+          borderSide: BorderSide(color: p.accent, width: 2),
+        ),
+        errorBorder: UnderlineInputBorder(
+          borderRadius: BorderRadius.circular(AppRadius.md),
+          borderSide: BorderSide(color: p.expense, width: 2),
+        ),
+        focusedErrorBorder: UnderlineInputBorder(
+          borderRadius: BorderRadius.circular(AppRadius.md),
+          borderSide: BorderSide(color: p.expense, width: 2),
+        ),
+        floatingLabelStyle: WidgetStateTextStyle.resolveWith(
+          (states) => textTheme.bodyMedium!.copyWith(
+            color: states.contains(WidgetState.error)
+                ? p.expense
+                : states.contains(WidgetState.focused)
+                ? p.accent
+                : p.textSecondary,
+          ),
         ),
         hintStyle: textTheme.bodyLarge?.copyWith(color: p.textSecondary),
         labelStyle: textTheme.bodyLarge?.copyWith(color: p.textSecondary),
@@ -207,6 +225,14 @@ abstract final class AppTheme {
           (s) => s.contains(WidgetState.selected) ? p.accent : p.surfaceHigh,
         ),
         trackOutlineColor: WidgetStateProperty.all(Colors.transparent),
+      ),
+      floatingActionButtonTheme: FloatingActionButtonThemeData(
+        backgroundColor: p.accent,
+        foregroundColor: p.onAccent,
+        elevation: 2,
+        highlightElevation: 4,
+        extendedTextStyle: textTheme.labelLarge,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.lg)),
       ),
       progressIndicatorTheme: ProgressIndicatorThemeData(
         color: p.accent,

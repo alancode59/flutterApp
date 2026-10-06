@@ -32,7 +32,7 @@ void main() {
     expect(find.text('Te queda esta quincena'), findsOneWidget);
 
     for (final (tab, text) in [
-      ('Movimientos', 'Tu historial está vacío'),
+      ('Movimientos', 'Quincena'),
       ('Tarjetas', 'Agrega tu primera tarjeta'),
       ('Análisis', 'Sin datos para analizar'),
       ('Inicio', 'Te queda esta quincena'),
