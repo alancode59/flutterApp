@@ -48,13 +48,13 @@ void main() {
 
     await tester.tap(find.text('Omitir'));
     await tester.pumpAndSettle();
-    expect(find.text('Disponible esta quincena'), findsOneWidget);
+    expect(find.text('Te queda esta quincena'), findsOneWidget);
     expect(repo.saved.onboardingCompleted, isTrue);
   });
 
   testWidgets('con la bienvenida vista abre directo en Inicio', (tester) async {
     await pumpApp(tester, onboardingDone: true);
-    expect(find.text('Disponible esta quincena'), findsOneWidget);
+    expect(find.text('Te queda esta quincena'), findsOneWidget);
   });
 
   testWidgets('la barra inferior cambia de sección y abre el alta rápida', (tester) async {

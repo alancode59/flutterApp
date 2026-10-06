@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 /// Paletas disponibles. El nombre del enum se guarda en Ajustes, así que no
 /// se deben renombrar sin una migración.
-enum AppPaletteId { grafito, menta, coral }
+enum AppPaletteId { medianoche, grafito, menta, coral }
 
 /// Colores base de una paleta para un brillo (claro u oscuro).
 @immutable
@@ -63,9 +63,41 @@ class AppPalette {
 
   PaletteColors of(Brightness brightness) => brightness == Brightness.dark ? dark : light;
 
-  static AppPalette byId(AppPaletteId id) => all.firstWhere((p) => p.id == id, orElse: () => grafito);
+  static AppPalette byId(AppPaletteId id) => all.firstWhere((p) => p.id == id, orElse: () => medianoche);
 
-  static const List<AppPalette> all = [grafito, menta, coral];
+  static const List<AppPalette> all = [medianoche, grafito, menta, coral];
+
+  static const medianoche = AppPalette(
+    id: AppPaletteId.medianoche,
+    name: 'Medianoche',
+    description: 'Azul marino profundo con acento cian. Tranquila y muy legible.',
+    light: PaletteColors(
+      background: Color(0xFFF3F6FA),
+      surface: Color(0xFFFFFFFF),
+      surfaceHigh: Color(0xFFE6EDF5),
+      outline: Color(0xFFD5DFEB),
+      textPrimary: Color(0xFF0A1220),
+      textSecondary: Color(0xFF52647D),
+      accent: Color(0xFF0E7490),
+      onAccent: Color(0xFFFFFFFF),
+      income: Color(0xFF047857),
+      expense: Color(0xFFD12E3B),
+      warning: Color(0xFFB45309),
+    ),
+    dark: PaletteColors(
+      background: Color(0xFF0A1220),
+      surface: Color(0xFF13213A),
+      surfaceHigh: Color(0xFF1E3150),
+      outline: Color(0xFF263A5C),
+      textPrimary: Color(0xFFEAF0F7),
+      textSecondary: Color(0xFF8EA2BD),
+      accent: Color(0xFF2DD4E8),
+      onAccent: Color(0xFF04212A),
+      income: Color(0xFF3DDC97),
+      expense: Color(0xFFFF7A85),
+      warning: Color(0xFFF5B43C),
+    ),
+  );
 
   static const grafito = AppPalette(
     id: AppPaletteId.grafito,

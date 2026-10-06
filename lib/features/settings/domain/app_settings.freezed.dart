@@ -214,7 +214,7 @@ return $default(_that.themeMode,_that.palette,_that.onboardingCompleted);case _:
 
 
 class _AppSettings implements AppSettings {
-  const _AppSettings({this.themeMode = ThemeMode.system, this.palette = AppPaletteId.grafito, this.onboardingCompleted = false});
+  const _AppSettings({this.themeMode = ThemeMode.system, this.palette = AppPaletteId.medianoche, this.onboardingCompleted = false});
   
 
 @override@JsonKey() final  ThemeMode themeMode;

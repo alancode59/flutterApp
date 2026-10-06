@@ -9,7 +9,7 @@ part 'app_settings.freezed.dart';
 abstract class AppSettings with _$AppSettings {
   const factory AppSettings({
     @Default(ThemeMode.system) ThemeMode themeMode,
-    @Default(AppPaletteId.grafito) AppPaletteId palette,
+    @Default(AppPaletteId.medianoche) AppPaletteId palette,
     @Default(false) bool onboardingCompleted,
   }) = _AppSettings;
 }

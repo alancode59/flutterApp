@@ -41,6 +41,6 @@ void main() {
     await db
         .into(db.settingsEntries)
         .insert(SettingsEntriesCompanion.insert(key: 'palette', value: 'inexistente'));
-    expect((await repo.load()).palette, AppPaletteId.grafito);
+    expect((await repo.load()).palette, AppPaletteId.medianoche);
   });
 }

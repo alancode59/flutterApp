@@ -25,31 +25,27 @@ class DashboardScreen extends StatelessWidget {
     final sections = <Widget>[
       _Header(now: now),
       _BalanceCard(quincena: quincena, now: now),
-      const _QuickActions(),
+      _PrimaryActions(onAdd: () => showQuickAddSheet(context)),
       SectionHeader(
-        title: 'Próximos pagos',
+        title: 'Próximo pago',
         actionLabel: 'Tarjetas',
         onAction: () => context.go(AppRoutes.cards),
       ),
-      _DashboardCard(
-        child: EmptyState(
-          compact: true,
-          icon: Icons.credit_card_rounded,
-          title: 'Sin tarjetas registradas',
-          message: 'Agrega tus tarjetas para ver fechas de corte y pago.',
-          actionLabel: 'Agregar tarjeta',
-          onAction: () => context.go(AppRoutes.cards),
-        ),
-      ),
+      _NextPaymentPlaceholder(onTap: () => context.go(AppRoutes.cards)),
       const SectionHeader(title: 'Últimos movimientos'),
-      _DashboardCard(
-        child: EmptyState(
-          compact: true,
-          icon: Icons.receipt_long_rounded,
-          title: 'Aún no hay movimientos',
-          message: 'Registra tu primer gasto o ingreso en segundos.',
-          actionLabel: 'Agregar movimiento',
-          onAction: () => showQuickAddSheet(context),
+      _Padded(
+        child: Card(
+          child: SizedBox(
+            width: double.infinity,
+            child: EmptyState(
+              compact: true,
+              icon: Icons.receipt_long_rounded,
+              title: 'Aún no hay movimientos',
+              message: 'Registra tu primer gasto o ingreso en segundos.',
+              actionLabel: 'Agregar movimiento',
+              onAction: () => showQuickAddSheet(context),
+            ),
+          ),
         ),
       ),
       const SizedBox(height: AppSpacing.xxl),
@@ -70,6 +66,18 @@ class DashboardScreen extends StatelessWidget {
   }
 }
 
+class _Padded extends StatelessWidget {
+  const _Padded({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.symmetric(horizontal: AppSpacing.page),
+    child: child,
+  );
+}
+
 class _Header extends StatelessWidget {
   const _Header({required this.now});
 
@@ -85,21 +93,14 @@ class _Header extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(AppSpacing.page - 4, AppSpacing.xs, AppSpacing.page, 0),
+      padding: const EdgeInsets.fromLTRB(AppSpacing.page, AppSpacing.sm, AppSpacing.page - 4, AppSpacing.md),
       child: Row(
         children: [
-          IconButton(
-            tooltip: 'Más opciones',
-            onPressed: () => context.push(AppRoutes.more),
-            style: IconButton.styleFrom(backgroundColor: context.colors.surfaceHigh),
-            icon: const Icon(Icons.person_rounded),
-          ),
-          const SizedBox(width: AppSpacing.sm),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(_greeting, style: context.text.titleMedium),
+                Text(_greeting, style: context.text.headlineSmall),
                 Text(
                   Formatters.longDate(now),
                   style: context.text.bodySmall,
@@ -109,12 +110,20 @@ class _Header extends StatelessWidget {
               ],
             ),
           ),
+          IconButton(
+            tooltip: 'Más opciones',
+            onPressed: () => context.push(AppRoutes.more),
+            style: IconButton.styleFrom(backgroundColor: context.scheme.surfaceContainer),
+            icon: const Icon(Icons.person_rounded),
+          ),
         ],
       ),
     );
   }
 }
 
+/// Saldo disponible de la quincena con la barra de gastado contra el límite.
+/// Los montos se conectan a datos reales en las fases 2 (movimientos) y 5 (presupuesto).
 class _BalanceCard extends StatelessWidget {
   const _BalanceCard({required this.quincena, required this.now});
 
@@ -123,48 +132,66 @@ class _BalanceCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    const available = 0;
+    const spent = 0;
+    const int? limit = null;
+    final progress = limit == null || limit == 0 ? 0.0 : (spent / limit).clamp(0.0, 1.0);
     final daysLeft = quincena.daysLeft(now);
-    // Avance del periodo; en la Fase 5 se agrega el avance del presupuesto.
-    final elapsed = 1 - (daysLeft - 1) / quincena.lengthInDays;
+    final secondary = context.text.labelMedium;
 
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(AppSpacing.page, AppSpacing.xl, AppSpacing.page, 0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('Disponible esta quincena', style: context.text.labelMedium),
-          const SizedBox(height: AppSpacing.xs),
-          FittedBox(
-            fit: BoxFit.scaleDown,
-            alignment: Alignment.centerLeft,
-            child: AnimatedAmount(cents: 0, style: AppTypography.amount(48, color: context.scheme.onSurface)),
-          ),
-          const SizedBox(height: AppSpacing.sm),
-          Wrap(
-            spacing: AppSpacing.xs,
-            runSpacing: AppSpacing.xs,
+    return _Padded(
+      child: Card(
+        child: Padding(
+          padding: const EdgeInsets.all(AppSpacing.lg),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _Pill(icon: Icons.calendar_today_rounded, label: quincena.label),
+              Row(
+                children: [
+                  Expanded(child: Text('Te queda esta quincena', style: secondary)),
+                  Text(quincena.label, style: secondary),
+                ],
+              ),
+              const SizedBox(height: AppSpacing.xs),
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerLeft,
+                child: AnimatedAmount(
+                  cents: available,
+                  style: AppTypography.amount(44, color: context.scheme.onSurface),
+                ),
+              ),
+              const SizedBox(height: AppSpacing.md),
+              Semantics(
+                label: 'Presupuesto usado ${Formatters.percent(progress)}',
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(AppRadius.pill),
+                  child: TweenAnimationBuilder<double>(
+                    tween: Tween(begin: 0, end: progress),
+                    duration: AppDurations.counter,
+                    curve: AppCurves.emphasized,
+                    builder: (_, v, _) => LinearProgressIndicator(value: v, minHeight: 8),
+                  ),
+                ),
+              ),
+              const SizedBox(height: AppSpacing.xs),
+              Row(
+                children: [
+                  Expanded(child: Text('Gastado ${Formatters.moneyRounded(spent)}', style: secondary)),
+                  Text(
+                    limit == null ? 'Sin límite definido' : 'Límite ${Formatters.moneyRounded(limit)}',
+                    style: secondary,
+                  ),
+                ],
+              ),
+              const SizedBox(height: AppSpacing.sm),
               _Pill(
                 icon: Icons.hourglass_bottom_rounded,
-                label: daysLeft == 1 ? 'Último día' : '$daysLeft días restantes',
+                label: daysLeft == 1 ? 'Último día de la quincena' : '$daysLeft días restantes',
               ),
             ],
           ),
-          const SizedBox(height: AppSpacing.md),
-          Semantics(
-            label: 'Avance de la quincena ${Formatters.percent(elapsed)}',
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(AppRadius.pill),
-              child: TweenAnimationBuilder<double>(
-                tween: Tween(begin: 0, end: elapsed),
-                duration: AppDurations.counter,
-                curve: AppCurves.emphasized,
-                builder: (_, v, _) => LinearProgressIndicator(value: v, minHeight: 6),
-              ),
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }
@@ -187,7 +214,7 @@ class _Pill extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 14, color: context.colors.textSecondary),
+          Icon(icon, size: 14, color: context.scheme.primary),
           const SizedBox(width: 6),
           Text(label, style: context.text.labelMedium),
         ],
@@ -196,83 +223,142 @@ class _Pill extends StatelessWidget {
   }
 }
 
-class _QuickActions extends StatelessWidget {
-  const _QuickActions();
+class _PrimaryActions extends StatelessWidget {
+  const _PrimaryActions({required this.onAdd});
+
+  final VoidCallback onAdd;
 
   @override
   Widget build(BuildContext context) {
-    void soon(String what) => ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(content: Text('$what estará disponible pronto.')));
-
-    final actions = [
-      (Icons.add_rounded, 'Agregar', () => showQuickAddSheet(context)),
-      (Icons.credit_score_rounded, 'Pagar tarjeta', () => soon('Pagar tarjeta')),
-      (Icons.pie_chart_rounded, 'Presupuesto', () => soon('Presupuesto')),
-      (Icons.more_horiz_rounded, 'Más', () => context.push(AppRoutes.more)),
-    ];
-
     return Padding(
-      padding: const EdgeInsets.fromLTRB(AppSpacing.md, AppSpacing.xl, AppSpacing.md, 0),
+      padding: const EdgeInsets.fromLTRB(AppSpacing.page, AppSpacing.sm, AppSpacing.page, 0),
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          for (final (icon, label, onTap) in actions)
-            Expanded(
-              child: _QuickAction(icon: icon, label: label, onTap: onTap),
-            ),
+          Expanded(
+            child: _ActionButton(icon: Icons.add_rounded, label: 'Gasto', filled: true, onTap: onAdd),
+          ),
+          const SizedBox(width: AppSpacing.sm),
+          Expanded(
+            child: _ActionButton(icon: Icons.south_west_rounded, label: 'Ingreso', onTap: onAdd),
+          ),
         ],
       ),
     );
   }
 }
 
-class _QuickAction extends StatelessWidget {
-  const _QuickAction({required this.icon, required this.label, required this.onTap});
+class _ActionButton extends StatelessWidget {
+  const _ActionButton({required this.icon, required this.label, required this.onTap, this.filled = false});
 
   final IconData icon;
   final String label;
   final VoidCallback onTap;
+  final bool filled;
 
   @override
   Widget build(BuildContext context) {
+    final bg = filled ? context.scheme.primary : context.scheme.surfaceContainer;
+    final fg = filled ? context.scheme.onPrimary : context.scheme.onSurface;
+
     return Pressable(
-      semanticLabel: label,
-      scale: 0.92,
+      semanticLabel: 'Agregar $label'.toLowerCase(),
+      scale: 0.95,
       onTap: onTap,
-      child: Column(
-        children: [
-          Container(
-            width: 52,
-            height: 52,
-            decoration: BoxDecoration(color: context.colors.surfaceHigh, shape: BoxShape.circle),
-            child: Icon(icon, color: context.scheme.primary),
-          ),
-          const SizedBox(height: AppSpacing.xs),
-          Text(
-            label,
-            textAlign: TextAlign.center,
-            maxLines: 2,
-            style: context.text.labelMedium?.copyWith(color: context.scheme.onSurface),
-          ),
-        ],
+      child: Container(
+        height: 52,
+        decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(AppRadius.md)),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, color: fg, size: 20),
+            const SizedBox(width: AppSpacing.xs),
+            Text(label, style: context.text.labelLarge?.copyWith(color: fg)),
+          ],
+        ),
       ),
     );
   }
 }
 
-class _DashboardCard extends StatelessWidget {
-  const _DashboardCard({required this.child});
+/// Silueta de tarjeta de crédito mientras no hay tarjetas registradas.
+class _NextPaymentPlaceholder extends StatelessWidget {
+  const _NextPaymentPlaceholder({required this.onTap});
 
-  final Widget child;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.page),
-      child: Card(
-        child: SizedBox(width: double.infinity, child: child),
+    return _Padded(
+      child: Pressable(
+        semanticLabel: 'Agregar tarjeta de crédito',
+        onTap: onTap,
+        child: CustomPaint(
+          painter: _DashedBorderPainter(color: context.scheme.outline, radius: AppRadius.lg),
+          child: SizedBox(
+            height: 112,
+            child: Padding(
+              padding: const EdgeInsets.all(AppSpacing.md),
+              child: Row(
+                children: [
+                  Container(
+                    width: 48,
+                    height: 48,
+                    decoration: BoxDecoration(
+                      color: context.scheme.primaryContainer,
+                      borderRadius: BorderRadius.circular(AppRadius.md),
+                    ),
+                    child: Icon(Icons.add_card_rounded, color: context.scheme.primary),
+                  ),
+                  const SizedBox(width: AppSpacing.md),
+                  Expanded(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Agrega una tarjeta', style: context.text.titleMedium),
+                        const SizedBox(height: 2),
+                        Text(
+                          'Verás aquí tu corte proyectado y cuántos días faltan para pagar.',
+                          style: context.text.bodySmall,
+                        ),
+                      ],
+                    ),
+                  ),
+                  Icon(Icons.chevron_right_rounded, color: context.colors.textSecondary),
+                ],
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }
+}
+
+class _DashedBorderPainter extends CustomPainter {
+  _DashedBorderPainter({required this.color, required this.radius});
+
+  final Color color;
+  final double radius;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.5;
+    final path = Path()..addRRect(RRect.fromRectAndRadius(Offset.zero & size, Radius.circular(radius)));
+    const dash = 6.0;
+    const gap = 5.0;
+    for (final metric in path.computeMetrics()) {
+      var d = 0.0;
+      while (d < metric.length) {
+        canvas.drawPath(metric.extractPath(d, d + dash), paint);
+        d += dash + gap;
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(_DashedBorderPainter old) => old.color != color || old.radius != radius;
 }

@@ -100,7 +100,7 @@ class CardsIllustration extends StatelessWidget {
                 offset: const Offset(16, 30),
                 child: Transform.rotate(
                   angle: 4 * math.pi / 180,
-                  child: const _MiniCard(color: Color(0xFF3F3FD9), bank: 'Banco Azul', last4: '4821'),
+                  child: const _MiniCard(color: Color(0xFF1D4ED8), bank: 'Banco Azul', last4: '4821'),
                 ),
               )
               .animate(target: active ? 1 : 0)

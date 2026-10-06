@@ -29,13 +29,13 @@ void main() {
       await tester.tap(find.text('Omitir'));
       await settle(tester);
     }
-    expect(find.text('Disponible esta quincena'), findsOneWidget);
+    expect(find.text('Te queda esta quincena'), findsOneWidget);
 
     for (final (tab, text) in [
       ('Movimientos', 'Tu historial está vacío'),
       ('Tarjetas', 'Agrega tu primera tarjeta'),
       ('Análisis', 'Sin datos para analizar'),
-      ('Inicio', 'Disponible esta quincena'),
+      ('Inicio', 'Te queda esta quincena'),
     ]) {
       await tester.tap(navItem(tab));
       await tester.pumpAndSettle();
@@ -68,7 +68,7 @@ void main() {
     expect(saved.palette, AppPaletteId.coral);
 
     // Deja la app como estaba para el usuario.
-    await tester.tap(find.text('Grafito'));
+    await tester.tap(find.text('Medianoche'));
     await tester.pumpAndSettle();
     await tester.ensureVisible(find.text('Sistema'));
     await tester.pumpAndSettle();
