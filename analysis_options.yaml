@@ -1,0 +1,31 @@
+include: package:flutter_lints/flutter.yaml
+
+analyzer:
+  exclude:
+    - build/**
+    - android/**
+    - ios/**
+    - web/**
+    - macos/**
+    - "**/*.g.dart"
+    - "**/*.freezed.dart"
+  language:
+    strict-casts: true
+    strict-raw-types: true
+
+linter:
+  rules:
+    - prefer_const_constructors
+    - prefer_const_declarations
+    - prefer_final_locals
+    - prefer_single_quotes
+    - require_trailing_commas
+    - sort_child_properties_last
+    - unawaited_futures
+    - use_super_parameters
+
+plugins:
+  riverpod_lint: ^3.1.9
+
+formatter:
+  page_width: 110
