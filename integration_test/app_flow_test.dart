@@ -68,9 +68,8 @@ void main() {
     expect(saved.palette, AppPaletteId.coral);
 
     // Deja la app como estaba para el usuario.
+    await tester.scrollUntilVisible(find.text('Sistema'), -200, scrollable: find.byType(Scrollable).first);
     await tester.tap(find.text('Medianoche'));
-    await tester.pumpAndSettle();
-    await tester.ensureVisible(find.text('Sistema'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Sistema'));
     await tester.pumpAndSettle();
