@@ -1,14 +1,16 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_tokens.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../core/utils/formatters.dart';
+import '../../../cards/presentation/card_providers.dart';
 import '../../../categories/domain/category.dart';
 import '../../../categories/presentation/widgets/category_avatar.dart';
 import '../../domain/movement.dart';
 
-class MovementTile extends StatelessWidget {
+class MovementTile extends ConsumerWidget {
   const MovementTile({required this.movement, required this.category, this.onTap, super.key});
 
   final Movement movement;
@@ -16,12 +18,13 @@ class MovementTile extends StatelessWidget {
   final VoidCallback? onTap;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final m = movement;
+    final card = m.cardId == null ? null : ref.watch(cardsByIdProvider).value?[m.cardId];
     final note = m.note?.trim();
     final hasNote = note != null && note.isNotEmpty;
     final title = hasNote ? note : (category?.name ?? 'Sin categoría');
-    final detail = m.isExpense ? m.paymentMethod?.label : m.incomeSource;
+    final detail = m.isExpense ? (card?.shortLabel ?? m.paymentMethod?.label) : m.incomeSource;
     final subtitle = [if (hasNote) category?.name, detail].whereType<String>().join(' · ');
     final amountText = m.isExpense
         ? '-${Formatters.money(m.amountCents)}'
@@ -32,6 +35,8 @@ class MovementTile extends StatelessWidget {
       button: onTap != null,
       label:
           '$title, ${m.kind.label} de ${Formatters.money(m.amountCents)}'
+          '${card != null ? ', con ${card.name}' : ''}'
+          '${m.isInstallment ? ', mensualidad ${m.installmentNumber}' : ''}'
           '${m.isUnexpected ? ', imprevisto' : ''}, ${Formatters.date(m.date)}',
       excludeSemantics: true,
       child: InkWell(
@@ -67,7 +72,18 @@ class MovementTile extends StatelessWidget {
                             style: context.text.bodySmall,
                           ),
                         ),
-                        if (m.isUnexpected) ...[const SizedBox(width: 6), const _UnexpectedBadge()],
+                        if (m.isInstallment) ...[
+                          const SizedBox(width: 6),
+                          _Badge(label: 'MSI ${m.installmentNumber ?? ''}', color: context.scheme.primary),
+                        ],
+                        if (m.isUnexpected) ...[
+                          const SizedBox(width: 6),
+                          _Badge(
+                            label: 'Imprevisto',
+                            icon: Icons.bolt_rounded,
+                            color: context.colors.warning,
+                          ),
+                        ],
                       ],
                     ),
                   ],
@@ -90,12 +106,15 @@ class MovementTile extends StatelessWidget {
   }
 }
 
-class _UnexpectedBadge extends StatelessWidget {
-  const _UnexpectedBadge();
+class _Badge extends StatelessWidget {
+  const _Badge({required this.label, required this.color, this.icon});
+
+  final String label;
+  final Color color;
+  final IconData? icon;
 
   @override
   Widget build(BuildContext context) {
-    final color = context.colors.warning;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
       decoration: BoxDecoration(
@@ -105,9 +124,9 @@ class _UnexpectedBadge extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.bolt_rounded, size: 11, color: color),
+          if (icon != null) Icon(icon, size: 11, color: color),
           Text(
-            'Imprevisto',
+            label,
             style: context.text.labelSmall?.copyWith(color: color, fontWeight: FontWeight.w600),
           ),
         ],

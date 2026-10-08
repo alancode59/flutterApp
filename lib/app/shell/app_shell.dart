@@ -32,6 +32,9 @@ class AppShell extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      // La barra flota sobre el contenido; las listas reciben su alto como padding inferior.
+      extendBody: true,
+      backgroundColor: Theme.of(context).colorScheme.surface,
       body: _BranchSwitcher(index: shell.currentIndex, children: children),
       bottomNavigationBar: AppNavBar(
         destinations: _destinations,
@@ -77,22 +80,21 @@ class _Branch extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // TickerMode va por dentro de las animaciones: si las envolviera, la pestaña
+    // saliente congelaría su fade y seguiría tapando a la nueva.
     return IgnorePointer(
       ignoring: !active,
       child: ExcludeSemantics(
         excluding: !active,
-        child: TickerMode(
-          enabled: active,
-          child: AnimatedOpacity(
-            opacity: active ? 1 : 0,
+        child: AnimatedOpacity(
+          opacity: active ? 1 : 0,
+          duration: duration,
+          curve: AppCurves.standard,
+          child: AnimatedScale(
+            scale: active ? 1 : 0.98,
             duration: duration,
             curve: AppCurves.standard,
-            child: AnimatedScale(
-              scale: active ? 1 : 0.98,
-              duration: duration,
-              curve: AppCurves.standard,
-              child: child,
-            ),
+            child: TickerMode(enabled: active, child: child),
           ),
         ),
       ),

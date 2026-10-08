@@ -2,6 +2,7 @@ import 'package:drift/drift.dart';
 import 'package:drift_flutter/drift_flutter.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
+import '../../features/cards/domain/credit_card.dart';
 import '../../features/categories/domain/category_catalog.dart';
 import '../../features/recurring/domain/recurring_rule.dart';
 import '../../features/transactions/domain/movement.dart';
@@ -9,7 +10,17 @@ import 'tables.dart';
 
 part 'app_database.g.dart';
 
-@DriftDatabase(tables: [SettingsEntries, Categories, RecurringRules, Movements])
+@DriftDatabase(
+  tables: [
+    SettingsEntries,
+    Categories,
+    RecurringRules,
+    Movements,
+    CreditCards,
+    InstallmentPlans,
+    CardPayments,
+  ],
+)
 class AppDatabase extends _$AppDatabase {
   /// Constructor para pruebas (por ejemplo `NativeDatabase.memory()`).
   AppDatabase(super.executor);
@@ -26,7 +37,7 @@ class AppDatabase extends _$AppDatabase {
       );
 
   @override
-  int get schemaVersion => 2;
+  int get schemaVersion => 4;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -41,6 +52,23 @@ class AppDatabase extends _$AppDatabase {
         await m.createTable(movements);
         await m.createIndex(movementsDate);
         await _seedCategories();
+      }
+      if (from < 3) {
+        await m.createTable(creditCards);
+        await m.createTable(installmentPlans);
+        await m.createTable(cardPayments);
+        await m.createIndex(cardPaymentsCard);
+        // En una base creada en v2 la tabla movements ya existe sin estas columnas.
+        if (from >= 2) {
+          await m.addColumn(movements, movements.installmentPlanId);
+          await m.addColumn(movements, movements.installmentNumber);
+        }
+      }
+      // Desde v3 las tarjetas ya existen; en bases más viejas se crean completas arriba.
+      if (from == 3) {
+        await m.addColumn(creditCards, creditCards.balanceDate);
+        await m.addColumn(creditCards, creditCards.statementRemaining);
+        await m.addColumn(creditCards, creditCards.minimumPayment);
       }
     },
     beforeOpen: (details) async {

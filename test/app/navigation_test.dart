@@ -3,6 +3,10 @@ import 'package:drift/native.dart';
 import 'package:finanzas/app/app.dart';
 import 'package:finanzas/app/shell/app_nav_bar.dart';
 import 'package:finanzas/core/database/app_database.dart';
+import 'package:finanzas/features/cards/data/card_repository.dart';
+import 'package:finanzas/features/cards/domain/credit_card.dart';
+import 'package:finanzas/features/dashboard/presentation/dashboard_screen.dart';
+import 'package:finanzas/features/reports/presentation/reports_screen.dart';
 import 'package:finanzas/features/settings/data/drift_settings_repository.dart';
 import 'package:finanzas/features/settings/domain/app_settings.dart';
 import 'package:finanzas/features/settings/domain/settings_repository.dart';
@@ -10,6 +14,7 @@ import 'package:finanzas/features/settings/presentation/settings_controller.dart
 import 'package:finanzas/features/transactions/data/movement_repository.dart';
 import 'package:finanzas/features/transactions/domain/movement.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/date_symbol_data_local.dart';
@@ -67,7 +72,7 @@ void main() {
 
     await tester.tap(find.text('Omitir'));
     await tester.pumpAndSettle();
-    expect(find.text('Te queda esta quincena'), findsOneWidget);
+    expect(find.text('Disponible esta quincena'), findsOneWidget);
     expect(repo.saved.onboardingCompleted, isTrue);
     await tearDownApp(tester);
   });
@@ -148,6 +153,68 @@ void main() {
     await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 100)));
     await tester.pumpAndSettle();
     expect(find.text('Tacos'), findsOneWidget);
+    await tearDownApp(tester);
+  });
+
+  double opacityOf(WidgetTester tester, Type screen) => tester
+      .renderObject<RenderAnimatedOpacity>(
+        find.ancestor(of: find.byType(screen), matching: find.byType(AnimatedOpacity)).first,
+      )
+      .opacity
+      .value;
+
+  testWidgets('al regresar a una pestaña anterior, la saliente se oculta', (tester) async {
+    await pumpApp(tester, onboardingDone: true);
+
+    await tester.tap(navItem('Análisis'));
+    await tester.pumpAndSettle();
+    expect(opacityOf(tester, ReportsScreen), 1);
+
+    await tester.tap(navItem('Inicio'));
+    await tester.pumpAndSettle();
+    expect(opacityOf(tester, DashboardScreen), 1);
+    expect(opacityOf(tester, ReportsScreen), 0);
+    await tearDownApp(tester);
+  });
+
+  testWidgets('compra con tarjeta a meses sin intereses', (tester) async {
+    await pumpApp(tester, onboardingDone: true);
+    await tester.runAsync(
+      () => CardRepository(db).add(
+        CreditCard(name: 'Oro', limitCents: 5000000, cutoffDay: 15, dueDay: 5, createdAt: DateTime.now()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(navItem('Agregar movimiento'));
+    await tester.pump(const Duration(seconds: 1));
+    await tester.pumpAndSettle();
+
+    for (final key in ['9', '0', '0']) {
+      await tester.tap(find.bySemanticsLabel(key).last);
+      await tester.pump();
+    }
+    await tester.tap(find.text('Oro'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('MSI'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('3 meses'));
+    await tester.pumpAndSettle();
+    expect(find.text(r'3 mensualidades de $300.00'), findsOneWidget);
+
+    await tester.tap(find.text('Guardar a 3 MSI'));
+    await tester.pump(const Duration(milliseconds: 500));
+    await tester.pumpAndSettle();
+
+    final charges = (await tester.runAsync(() => CardRepository(db).watchCharges().first))!;
+    expect(charges.map((m) => m.amountCents), [30000, 30000, 30000]);
+    expect(find.textContaining('Compra a 3 MSI guardada'), findsOneWidget);
+
+    await tester.tap(navItem('Tarjetas'));
+    await tester.pump(const Duration(seconds: 1));
+    await tester.pumpAndSettle();
+    expect(find.text('Corte proyectado'), findsOneWidget);
+    expect(find.text('Meses sin intereses'), findsOneWidget);
     await tearDownApp(tester);
   });
 }

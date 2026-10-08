@@ -35,4 +35,13 @@ void main() {
       expect(Formatters.longDate(d), 'lunes, 5 de octubre');
     });
   });
+
+  test('días relativos', () {
+    final today = DateTime(2026, 10, 7, 18);
+    expect(Formatters.relativeDays(DateTime(2026, 10, 7), today), 'hoy');
+    expect(Formatters.relativeDays(DateTime(2026, 10, 8, 1), today), 'mañana');
+    expect(Formatters.relativeDays(DateTime(2026, 10, 15), today), 'en 8 días');
+    expect(Formatters.relativeDays(DateTime(2026, 10, 6), today), 'ayer');
+    expect(Formatters.relativeDays(DateTime(2026, 10, 1), today), 'hace 6 días');
+  });
 }

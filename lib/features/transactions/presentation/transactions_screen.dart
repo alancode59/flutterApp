@@ -13,8 +13,11 @@ import '../../../core/widgets/animated_amount.dart';
 import '../../../core/widgets/async_reveal.dart';
 import '../../../core/widgets/empty_state.dart';
 import '../../../core/widgets/feedback.dart';
+import '../../../core/widgets/filter_pill.dart';
 import '../../../core/widgets/page_scaffold.dart';
 import '../../../core/widgets/skeleton.dart';
+import '../../../core/widgets/sliding_segmented.dart';
+import '../../../core/widgets/split_bar.dart';
 import '../../categories/domain/category.dart';
 import '../../categories/presentation/category_providers.dart';
 import '../data/movement_repository.dart';
@@ -116,60 +119,88 @@ class _PeriodBar extends ConsumerWidget {
     final period = filter.period;
 
     return Padding(
-      padding: const EdgeInsets.fromLTRB(AppSpacing.page, 0, AppSpacing.page, AppSpacing.xs),
+      padding: const EdgeInsets.fromLTRB(AppSpacing.page, AppSpacing.xs, AppSpacing.page, 0),
       child: Column(
         children: [
-          SizedBox(
-            width: double.infinity,
-            child: SegmentedButton<PeriodType>(
-              showSelectedIcon: false,
-              segments: [for (final t in PeriodType.values) ButtonSegment(value: t, label: Text(t.label))],
-              selected: {period.type},
-              onSelectionChanged: (s) {
-                Haptics.tap();
-                if (s.first == PeriodType.custom) {
-                  _pickRange(context, ref);
-                } else {
-                  notifier.setType(s.first);
-                }
-              },
-            ),
+          SlidingSegmented<PeriodType>(
+            segments: [for (final t in PeriodType.values) Segment(t, t.label)],
+            selected: period.type,
+            onChanged: (t) {
+              if (t == PeriodType.custom) {
+                _pickRange(context, ref);
+              } else {
+                notifier.setType(t);
+              }
+            },
           ),
-          const SizedBox(height: AppSpacing.xs),
+          const SizedBox(height: AppSpacing.sm),
           Row(
             children: [
-              IconButton(
+              _StepButton(
+                icon: Icons.chevron_left_rounded,
                 tooltip: 'Periodo anterior',
-                onPressed: period.canStep ? notifier.previous : null,
-                icon: const Icon(Icons.chevron_left_rounded),
+                onTap: period.canStep ? notifier.previous : null,
               ),
               Expanded(
-                child: InkWell(
-                  borderRadius: BorderRadius.circular(AppRadius.md),
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
                   onTap: period.type == PeriodType.custom ? () => _pickRange(context, ref) : null,
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
-                    child: AnimatedSwitcher(
-                      duration: AppDurations.medium,
-                      child: Text(
-                        period.label,
-                        key: ValueKey(period),
-                        textAlign: TextAlign.center,
-                        style: context.text.titleMedium,
+                  child: AnimatedSwitcher(
+                    duration: AppDurations.medium,
+                    transitionBuilder: (child, a) => FadeTransition(
+                      opacity: a,
+                      child: SlideTransition(
+                        position: Tween(begin: const Offset(0, 0.25), end: Offset.zero).animate(a),
+                        child: child,
                       ),
+                    ),
+                    child: Text(
+                      period.label,
+                      key: ValueKey(period),
+                      textAlign: TextAlign.center,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: context.text.titleMedium,
                     ),
                   ),
                 ),
               ),
-              IconButton(
+              _StepButton(
+                icon: Icons.chevron_right_rounded,
                 tooltip: 'Periodo siguiente',
-                onPressed: period.canStep ? notifier.next : null,
-                icon: const Icon(Icons.chevron_right_rounded),
+                onTap: period.canStep ? notifier.next : null,
               ),
             ],
           ),
         ],
       ),
+    );
+  }
+}
+
+class _StepButton extends StatelessWidget {
+  const _StepButton({required this.icon, required this.tooltip, required this.onTap});
+
+  final IconData icon;
+  final String tooltip;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return IconButton(
+      tooltip: tooltip,
+      onPressed: onTap == null
+          ? null
+          : () {
+              Haptics.tap();
+              onTap!();
+            },
+      style: IconButton.styleFrom(
+        backgroundColor: context.colors.surfaceHigh,
+        fixedSize: const Size(40, 40),
+        minimumSize: const Size(40, 40),
+      ),
+      icon: Icon(icon, size: 22),
     );
   }
 }
@@ -182,27 +213,18 @@ class _KindChips extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return SizedBox(
-      height: 48,
+      height: 52,
       child: ListView.separated(
-        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.page),
+        padding: const EdgeInsets.fromLTRB(AppSpacing.page, AppSpacing.xs, AppSpacing.page, AppSpacing.xs),
         scrollDirection: Axis.horizontal,
         itemCount: KindFilter.values.length,
         separatorBuilder: (_, _) => const SizedBox(width: AppSpacing.xs),
         itemBuilder: (context, i) {
           final k = KindFilter.values[i];
-          final isSelected = k == selected;
-          return ChoiceChip(
-            label: Text(k.label),
-            selected: isSelected,
-            showCheckmark: false,
-            labelStyle: context.text.labelLarge?.copyWith(
-              fontSize: 13,
-              color: isSelected ? context.scheme.onPrimary : context.scheme.onSurface,
-            ),
-            onSelected: (_) {
-              Haptics.tap();
-              ref.read(movementsFilterProvider.notifier).setKind(k);
-            },
+          return FilterPill(
+            label: k.label,
+            selected: k == selected,
+            onTap: () => ref.read(movementsFilterProvider.notifier).setKind(k),
           );
         },
       ),
@@ -217,60 +239,119 @@ class _SummaryCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    Widget cell(String label, int cents, Color color) => Expanded(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(label, style: context.text.labelMedium),
-          const SizedBox(height: 4),
-          FittedBox(
-            fit: BoxFit.scaleDown,
-            alignment: Alignment.centerLeft,
-            child: AnimatedAmount(
-              cents: cents,
-              style: AppTypography.amount(18, color: color),
-            ),
-          ),
-        ],
-      ),
-    );
+    final balance = summary.balanceCents;
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(AppSpacing.page, AppSpacing.xs, AppSpacing.page, AppSpacing.xs),
       child: Card(
         child: Padding(
-          padding: const EdgeInsets.all(AppSpacing.md),
+          padding: const EdgeInsets.all(AppSpacing.lg),
           child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              Text('Balance del periodo', style: context.text.labelMedium),
+              const SizedBox(height: 6),
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerLeft,
+                child: AnimatedAmount(
+                  cents: balance,
+                  smallCents: true,
+                  style: AppTypography.amount(
+                    34,
+                    color: balance < 0 ? context.colors.expense : context.scheme.onSurface,
+                  ),
+                ),
+              ),
+              const SizedBox(height: AppSpacing.md),
+              SplitBar(
+                values: [summary.incomeCents, summary.expenseCents],
+                colors: [context.colors.income, context.colors.expense],
+              ),
+              const SizedBox(height: AppSpacing.md),
               Row(
                 children: [
-                  cell('Ingresos', summary.incomeCents, context.colors.income),
-                  cell('Gastos', summary.expenseCents, context.scheme.onSurface),
-                  cell(
-                    'Balance',
-                    summary.balanceCents,
-                    summary.balanceCents < 0 ? context.colors.expense : context.scheme.onSurface,
+                  Expanded(
+                    child: _Stat(label: 'Ingresos', cents: summary.incomeCents, color: context.colors.income),
+                  ),
+                  const SizedBox(width: AppSpacing.md),
+                  Expanded(
+                    child: _Stat(label: 'Gastos', cents: summary.expenseCents, color: context.colors.expense),
                   ),
                 ],
               ),
               if (summary.unexpectedCents > 0) ...[
-                const SizedBox(height: AppSpacing.sm),
-                Row(
-                  children: [
-                    Icon(Icons.bolt_rounded, size: 16, color: context.colors.warning),
-                    const SizedBox(width: 4),
-                    Expanded(child: Text('Imprevistos en el periodo', style: context.text.labelMedium)),
-                    Text(
-                      Formatters.money(summary.unexpectedCents),
-                      style: AppTypography.amount(14, color: context.colors.warning, weight: FontWeight.w600),
-                    ),
-                  ],
+                const SizedBox(height: AppSpacing.md),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm, vertical: AppSpacing.xs),
+                  decoration: BoxDecoration(
+                    color: context.colors.warning.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(AppRadius.sm),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.bolt_rounded, size: 16, color: context.colors.warning),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          'Imprevistos',
+                          style: context.text.labelMedium?.copyWith(color: context.colors.warning),
+                        ),
+                      ),
+                      Text(
+                        Formatters.money(summary.unexpectedCents),
+                        style: AppTypography.amount(
+                          14,
+                          color: context.colors.warning,
+                          weight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ],
             ],
           ),
         ),
       ),
+    );
+  }
+}
+
+class _Stat extends StatelessWidget {
+  const _Stat({required this.label, required this.cents, required this.color});
+
+  final String label;
+  final int cents;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Container(
+              width: 8,
+              height: 8,
+              decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+            ),
+            const SizedBox(width: 6),
+            Text(label, style: context.text.labelMedium),
+          ],
+        ),
+        const SizedBox(height: 4),
+        FittedBox(
+          fit: BoxFit.scaleDown,
+          alignment: Alignment.centerLeft,
+          child: AnimatedAmount(
+            cents: cents,
+            smallCents: true,
+            style: AppTypography.amount(19, weight: FontWeight.w600, color: context.scheme.onSurface),
+          ),
+        ),
+      ],
     );
   }
 }
@@ -438,7 +519,7 @@ class _ListSkeleton extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const SizedBox(height: AppSpacing.xs),
-          const Skeleton(height: 88, radius: AppRadius.lg),
+          const Skeleton(height: 168, radius: AppRadius.lg),
           const SizedBox(height: AppSpacing.lg),
           const Skeleton(width: 120, height: 14),
           const SizedBox(height: AppSpacing.sm),

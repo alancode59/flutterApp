@@ -14,6 +14,12 @@ import '../../../core/services/haptics.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../core/widgets/feedback.dart';
 import '../../../core/widgets/skeleton.dart';
+import '../../cards/data/card_repository.dart';
+import '../../cards/domain/credit_card.dart';
+import '../../cards/domain/installment_plan.dart';
+import '../../cards/presentation/card_editor_sheet.dart';
+import '../../cards/presentation/card_providers.dart';
+import '../../cards/presentation/installment_plan_sheet.dart';
 import '../../categories/domain/category.dart';
 import '../../categories/presentation/category_editor_sheet.dart';
 import '../../categories/presentation/category_providers.dart';
@@ -26,11 +32,18 @@ import 'widgets/amount_keypad.dart';
 /// Alta rápida (o edición) de un movimiento: monto → categoría → Guardar.
 /// La categoría más usada y el último método de pago vienen preseleccionados,
 /// así que un gasto típico se registra en 2–3 toques.
+///
+/// Con [cardId] se abre como compra con esa tarjeta de crédito. Una mensualidad
+/// MSI no se edita aquí: se abre el detalle de su compra.
 Future<void> showQuickAddSheet(
   BuildContext context, {
   MovementKind kind = MovementKind.expense,
   Movement? editing,
+  int? cardId,
 }) {
+  if (editing != null && editing.isInstallment) {
+    return showInstallmentPlanSheet(context, editing.installmentPlanId!);
+  }
   final messenger = ScaffoldMessenger.of(context);
   return showModalBottomSheet<void>(
     context: context,
@@ -38,15 +51,27 @@ Future<void> showQuickAddSheet(
     useSafeArea: true,
     // Encima de la barra inferior, no dentro de la pestaña.
     useRootNavigator: true,
-    builder: (_) => QuickAddSheet(initialKind: editing?.kind ?? kind, editing: editing, messenger: messenger),
+    builder: (_) => QuickAddSheet(
+      initialKind: editing?.kind ?? kind,
+      editing: editing,
+      initialCardId: cardId,
+      messenger: messenger,
+    ),
   );
 }
 
 class QuickAddSheet extends ConsumerStatefulWidget {
-  const QuickAddSheet({required this.initialKind, required this.messenger, this.editing, super.key});
+  const QuickAddSheet({
+    required this.initialKind,
+    required this.messenger,
+    this.editing,
+    this.initialCardId,
+    super.key,
+  });
 
   final MovementKind initialKind;
   final Movement? editing;
+  final int? initialCardId;
   final ScaffoldMessengerState messenger;
 
   @override
@@ -59,6 +84,10 @@ class _QuickAddSheetState extends ConsumerState<QuickAddSheet> with SingleTicker
   int? _categoryId;
   late DateTime _day;
   PaymentMethod _method = PaymentMethod.cash;
+  int? _cardId;
+
+  /// Meses sin intereses de una compra nueva con tarjeta (null = de contado).
+  int? _msiMonths;
   bool _unexpected = false;
   String? _note;
   String? _source;
@@ -80,19 +109,98 @@ class _QuickAddSheetState extends ConsumerState<QuickAddSheet> with SingleTicker
       _categoryId = e.categoryId;
       _day = DateUtils.dateOnly(e.date);
       _method = e.paymentMethod ?? PaymentMethod.cash;
+      _cardId = e.cardId;
       _unexpected = e.isUnexpected;
       _note = e.note;
       _source = e.incomeSource;
     } else {
       _amount = const AmountInput();
       _day = DateUtils.dateOnly(DateTime.now());
-      unawaited(_loadLastMethod());
+      if (widget.initialCardId != null) {
+        _method = PaymentMethod.credit;
+        _cardId = widget.initialCardId;
+      } else {
+        unawaited(_loadLastMethod());
+      }
     }
   }
 
+  /// Preselecciona el método (y la tarjeta) del último gasto capturado.
   Future<void> _loadLastMethod() async {
-    final last = await ref.read(movementRepositoryProvider).lastPaymentMethod();
-    if (mounted && last != null && last != PaymentMethod.credit) setState(() => _method = last);
+    final last = await ref.read(movementRepositoryProvider).lastPayment();
+    if (!mounted || last == null) return;
+    if (last.method == PaymentMethod.credit) {
+      final cards = await ref.read(activeCardsProvider.future);
+      if (!mounted || cards.every((c) => c.id != last.cardId)) return;
+    }
+    setState(() {
+      _method = last.method;
+      _cardId = last.method == PaymentMethod.credit ? last.cardId : null;
+    });
+  }
+
+  void _selectCash(PaymentMethod method) {
+    Haptics.tap();
+    setState(() {
+      _method = method;
+      _cardId = null;
+      _msiMonths = null;
+    });
+  }
+
+  void _selectCard(int id) {
+    Haptics.tap();
+    setState(() {
+      _method = PaymentMethod.credit;
+      _cardId = id;
+    });
+  }
+
+  Future<void> _addCard() async {
+    final id = await showCardEditor(context);
+    if (id != null && mounted) _selectCard(id);
+  }
+
+  Future<void> _pickMsi() async {
+    final picked = await showModalBottomSheet<int>(
+      context: context,
+      useRootNavigator: true,
+      builder: (context) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(AppSpacing.page, 0, AppSpacing.page, AppSpacing.md),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text('Meses sin intereses', style: context.text.titleLarge),
+              const SizedBox(height: 4),
+              Text('Cada mensualidad contará como gasto en su mes.', style: context.text.bodySmall),
+              const SizedBox(height: AppSpacing.md),
+              Wrap(
+                spacing: AppSpacing.xs,
+                runSpacing: AppSpacing.xs,
+                children: [
+                  ChoiceChip(
+                    label: const Text('De contado'),
+                    selected: _msiMonths == null,
+                    onSelected: (_) => Navigator.pop(context, 0),
+                  ),
+                  for (final m in kMsiOptions)
+                    ChoiceChip(
+                      label: Text('$m meses'),
+                      selected: _msiMonths == m,
+                      onSelected: (_) => Navigator.pop(context, m),
+                    ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (picked == null || !mounted) return;
+    unawaited(Haptics.tap());
+    setState(() => _msiMonths = picked == 0 ? null : picked);
   }
 
   @override
@@ -240,10 +348,17 @@ class _QuickAddSheetState extends ConsumerState<QuickAddSheet> with SingleTicker
     return DateTime(_day.year, _day.month, _day.day, 12);
   }
 
+  bool get _isMsi => _isExpense && !_isEditing && _method == PaymentMethod.credit && _msiMonths != null;
+
   Future<void> _save([List<Category> categories = const []]) async {
     if (_saving) return;
     final categoryId = _categoryId ?? categories.firstOrNull?.id ?? _visibleCategories.firstOrNull?.id;
-    if (_amount.cents <= 0 || categoryId == null) {
+    final needsCard = _isExpense && _method == PaymentMethod.credit && _cardId == null;
+    if (_amount.cents <= 0 || categoryId == null || needsCard) {
+      _reject();
+      return;
+    }
+    if (_isMsi && _amount.cents < _msiMonths!) {
       _reject();
       return;
     }
@@ -255,7 +370,7 @@ class _QuickAddSheetState extends ConsumerState<QuickAddSheet> with SingleTicker
       date: _composeDate(),
       note: _note,
       paymentMethod: _isExpense ? _method : null,
-      cardId: widget.editing?.cardId,
+      cardId: _isExpense && _method == PaymentMethod.credit ? _cardId : null,
       isUnexpected: _isExpense && _unexpected,
       incomeSource: _isExpense ? null : _source,
       recurringRuleId: widget.editing?.recurringRuleId,
@@ -264,20 +379,36 @@ class _QuickAddSheetState extends ConsumerState<QuickAddSheet> with SingleTicker
     setState(() => _saving = true);
     final repo = ref.read(movementRepositoryProvider);
     try {
-      final id = _isEditing ? movement.id : await repo.add(movement);
-      if (_isEditing) await repo.update(movement);
+      final String message;
+      final VoidCallback onUndo;
+      if (_isMsi) {
+        final cards = ref.read(cardRepositoryProvider);
+        final categoryName = ref.read(categoriesByIdProvider).value?[categoryId]?.name;
+        final plan = InstallmentPlan(
+          cardId: _cardId!,
+          description: _note ?? categoryName ?? 'Compra a MSI',
+          totalCents: _amount.cents,
+          months: _msiMonths!,
+          categoryId: categoryId,
+          purchaseDate: movement.date,
+        );
+        final planId = await cards.addInstallmentPurchase(plan, isUnexpected: movement.isUnexpected);
+        message = 'Compra a ${plan.months} MSI guardada · ${Formatters.money(plan.monthlyCents)} al mes';
+        onUndo = () => cards.deletePlan(planId);
+      } else {
+        final id = _isEditing ? movement.id : await repo.add(movement);
+        if (_isEditing) await repo.update(movement);
+        message = _isEditing
+            ? 'Cambios guardados'
+            : '${_kind.label} de ${Formatters.money(movement.amountCents)} guardado';
+        onUndo = _isEditing ? () => repo.update(widget.editing!) : () => repo.delete(id);
+      }
       unawaited(Haptics.success());
       setState(() => _saved = true);
       await Future<void>.delayed(const Duration(milliseconds: 320));
       if (!mounted) return;
       Navigator.pop(context);
-      showAppSnackBar(
-        widget.messenger,
-        _isEditing
-            ? 'Cambios guardados'
-            : '${_kind.label} de ${Formatters.money(movement.amountCents)} guardado',
-        onUndo: _isEditing ? () => repo.update(widget.editing!) : () => repo.delete(id),
-      );
+      showAppSnackBar(widget.messenger, message, onUndo: onUndo);
     } catch (_) {
       if (!mounted) return;
       setState(() => _saving = false);
@@ -366,7 +497,14 @@ class _QuickAddSheetState extends ConsumerState<QuickAddSheet> with SingleTicker
                     onDelete: _isEditing ? _delete : null,
                   ),
                   Expanded(
-                    child: _AmountDisplay(amount: _amount, shake: _shake, kind: _kind),
+                    child: _AmountDisplay(
+                      amount: _amount,
+                      shake: _shake,
+                      kind: _kind,
+                      caption: _isMsi && _amount.cents > 0
+                          ? '${_msiMonths!} mensualidades de ${Formatters.money(_amount.cents ~/ _msiMonths!)}'
+                          : null,
+                    ),
                   ),
                   SizedBox(
                     height: 92,
@@ -392,8 +530,16 @@ class _QuickAddSheetState extends ConsumerState<QuickAddSheet> with SingleTicker
                   ),
                   const SizedBox(height: AppSpacing.xs),
                   _SaveButton(
-                    label: _isEditing ? 'Guardar cambios' : 'Guardar ${_kind.label.toLowerCase()}',
-                    enabled: _amount.cents > 0 && selectedId != null && !_saving,
+                    label: _isEditing
+                        ? 'Guardar cambios'
+                        : _isMsi
+                        ? 'Guardar a ${_msiMonths!} MSI'
+                        : 'Guardar ${_kind.label.toLowerCase()}',
+                    enabled:
+                        _amount.cents > 0 &&
+                        selectedId != null &&
+                        !_saving &&
+                        (_method != PaymentMethod.credit || !_isExpense || _cardId != null),
                     saving: _saving && !_saved,
                     saved: _saved,
                     onPressed: () => _save(categories),
@@ -415,18 +561,38 @@ class _QuickAddSheetState extends ConsumerState<QuickAddSheet> with SingleTicker
         ? 'Ayer'
         : Formatters.dayMonth(_day);
 
+    final cards = ref.watch(activeCardsProvider).value ?? const <CreditCard>[];
+    // Al editar, la tarjeta original se muestra aunque esté archivada.
+    final editingCard = ref.watch(cardsByIdProvider).value?[widget.editing?.cardId];
+    final cardOptions = [
+      if (editingCard != null && cards.every((c) => c.id != editingCard.id)) editingCard,
+      ...cards,
+    ];
+
     final chips = <Widget>[
       _DetailChip(icon: Icons.calendar_today_rounded, label: dateLabel, onTap: _pickDate),
       if (_isExpense) ...[
         for (final m in [PaymentMethod.cash, PaymentMethod.debit])
           _DetailChip(
-            icon: m == PaymentMethod.cash ? Icons.payments_outlined : Icons.credit_card_rounded,
+            icon: m == PaymentMethod.cash ? Icons.payments_outlined : Icons.account_balance_wallet_outlined,
             label: m.label,
             selected: _method == m,
-            onTap: () {
-              Haptics.tap();
-              setState(() => _method = m);
-            },
+            onTap: () => _selectCash(m),
+          ),
+        for (final c in cardOptions)
+          _DetailChip(
+            dotColor: c.color,
+            label: c.name,
+            selected: _method == PaymentMethod.credit && _cardId == c.id,
+            onTap: () => _selectCard(c.id),
+          ),
+        if (cardOptions.isEmpty) _DetailChip(icon: Icons.add_card_rounded, label: 'Tarjeta', onTap: _addCard),
+        if (_method == PaymentMethod.credit && _cardId != null && !_isEditing)
+          _DetailChip(
+            icon: Icons.calendar_view_month_rounded,
+            label: _msiMonths == null ? 'MSI' : '${_msiMonths!} MSI',
+            selected: _msiMonths != null,
+            onTap: _pickMsi,
           ),
         _DetailChip(
           icon: Icons.bolt_rounded,
@@ -564,11 +730,14 @@ class _KindToggle extends StatelessWidget {
 }
 
 class _AmountDisplay extends StatelessWidget {
-  const _AmountDisplay({required this.amount, required this.shake, required this.kind});
+  const _AmountDisplay({required this.amount, required this.shake, required this.kind, this.caption});
 
   final AmountInput amount;
   final AnimationController shake;
   final MovementKind kind;
+
+  /// Texto bajo el monto (por ejemplo, la mensualidad de una compra a MSI).
+  final String? caption;
 
   @override
   Widget build(BuildContext context) {
@@ -587,20 +756,40 @@ class _AmountDisplay extends StatelessWidget {
         child: Center(
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
-            child: FittedBox(
-              fit: BoxFit.scaleDown,
-              child: AnimatedSwitcher(
-                duration: AppDurations.fast,
-                transitionBuilder: (child, a) => FadeTransition(
-                  opacity: a,
-                  child: ScaleTransition(scale: Tween(begin: 0.96, end: 1.0).animate(a), child: child),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Flexible(
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: AnimatedSwitcher(
+                      duration: AppDurations.fast,
+                      transitionBuilder: (child, a) => FadeTransition(
+                        opacity: a,
+                        child: ScaleTransition(scale: Tween(begin: 0.96, end: 1.0).animate(a), child: child),
+                      ),
+                      child: Text(
+                        amount.display,
+                        key: ValueKey(amount.raw),
+                        style: AppTypography.amount(64, color: color),
+                      ),
+                    ),
+                  ),
                 ),
-                child: Text(
-                  amount.display,
-                  key: ValueKey(amount.raw),
-                  style: AppTypography.amount(64, color: color),
+                AnimatedSize(
+                  duration: AppDurations.medium,
+                  curve: AppCurves.standard,
+                  child: caption == null
+                      ? const SizedBox(width: double.infinity)
+                      : Padding(
+                          padding: const EdgeInsets.only(top: 4),
+                          child: Text(
+                            caption!,
+                            style: context.text.labelLarge?.copyWith(color: context.scheme.primary),
+                          ),
+                        ),
                 ),
-              ),
+              ],
             ),
           ),
         ),
@@ -753,14 +942,18 @@ class _CategoriesSkeleton extends StatelessWidget {
 
 class _DetailChip extends StatelessWidget {
   const _DetailChip({
-    required this.icon,
     required this.label,
     required this.onTap,
+    this.icon,
+    this.dotColor,
     this.selected = false,
     this.selectedColor,
   });
 
-  final IconData icon;
+  final IconData? icon;
+
+  /// Color de la tarjeta, en lugar de un ícono.
+  final Color? dotColor;
   final String label;
   final VoidCallback onTap;
   final bool selected;
@@ -786,7 +979,18 @@ class _DetailChip extends StatelessWidget {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(icon, size: 16, color: selected ? accent : context.colors.textSecondary),
+              if (dotColor != null)
+                Container(
+                  width: 12,
+                  height: 12,
+                  decoration: BoxDecoration(
+                    color: dotColor,
+                    shape: BoxShape.circle,
+                    border: Border.all(color: context.scheme.outline, width: 0.8),
+                  ),
+                )
+              else
+                Icon(icon, size: 16, color: selected ? accent : context.colors.textSecondary),
               const SizedBox(width: 6),
               ConstrainedBox(
                 constraints: const BoxConstraints(maxWidth: 140),

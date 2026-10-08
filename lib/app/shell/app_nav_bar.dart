@@ -1,3 +1,5 @@
+import 'dart:ui';
+
 import 'package:flutter/material.dart';
 
 import '../../core/services/haptics.dart';
@@ -13,7 +15,8 @@ class NavDestination {
   final IconData selectedIcon;
 }
 
-/// Barra inferior con 4 secciones y el botón central para agregar movimientos.
+/// Barra inferior flotante de cristal: 4 secciones y el botón central para
+/// agregar movimientos. El contenido se ve desenfocado por debajo.
 class AppNavBar extends StatelessWidget {
   const AppNavBar({
     required this.destinations,
@@ -28,34 +31,64 @@ class AppNavBar extends StatelessWidget {
   final ValueChanged<int> onSelect;
   final VoidCallback onAdd;
 
+  static const height = 66.0;
+
   @override
   Widget build(BuildContext context) {
     Widget item(int i) => Expanded(
       child: _NavItem(destination: destinations[i], selected: i == currentIndex, onTap: () => onSelect(i)),
     );
+    final bottomInset = MediaQuery.paddingOf(context).bottom;
+    final isDark = context.theme.brightness == Brightness.dark;
 
     // Las etiquetas crecen con el texto del sistema, pero con un tope para no romper la barra.
     return MediaQuery.withClampedTextScaling(
-      maxScaleFactor: 1.3,
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          color: context.scheme.surfaceContainer,
-          border: Border(top: BorderSide(color: context.scheme.outlineVariant, width: 0.5)),
+      maxScaleFactor: 1.2,
+      child: Padding(
+        padding: EdgeInsets.fromLTRB(
+          AppSpacing.sm,
+          0,
+          AppSpacing.sm,
+          bottomInset > 0 ? bottomInset - 8 : AppSpacing.sm,
         ),
-        child: SafeArea(
-          top: false,
-          child: SizedBox(
-            height: 68,
-            child: Row(
-              children: [
-                item(0),
-                item(1),
-                Expanded(
-                  child: Center(child: _AddButton(onTap: onAdd)),
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(AppRadius.xl),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: isDark ? 0.45 : 0.12),
+                blurRadius: 30,
+                offset: const Offset(0, 10),
+              ),
+            ],
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(AppRadius.xl),
+            child: BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 28, sigmaY: 28),
+              child: Container(
+                height: height,
+                decoration: BoxDecoration(
+                  color: context.colors.surfaceHigh.withValues(alpha: isDark ? 0.72 : 0.82),
+                  borderRadius: BorderRadius.circular(AppRadius.xl),
+                  border: Border.all(
+                    color: (isDark ? Colors.white : Colors.black).withValues(alpha: isDark ? 0.08 : 0.06),
+                    width: 0.8,
+                  ),
                 ),
-                item(2),
-                item(3),
-              ],
+                child: Row(
+                  children: [
+                    item(0),
+                    item(1),
+                    SizedBox(
+                      width: 72,
+                      child: Center(child: _AddButton(onTap: onAdd)),
+                    ),
+                    item(2),
+                    item(3),
+                  ],
+                ),
+              ),
             ),
           ),
         ),
@@ -80,11 +113,9 @@ class _NavItem extends StatelessWidget {
       button: true,
       label: destination.label,
       excludeSemantics: true,
-      child: InkResponse(
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
         onTap: onTap,
-        radius: 36,
-        highlightShape: BoxShape.rectangle,
-        containedInkWell: false,
         child: TweenAnimationBuilder<Color?>(
           tween: ColorTween(end: target),
           duration: AppDurations.medium,
@@ -92,20 +123,31 @@ class _NavItem extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               AnimatedScale(
-                scale: selected ? 1.08 : 1,
+                scale: selected ? 1.06 : 1,
                 duration: AppDurations.medium,
                 curve: AppCurves.spring,
-                child: Icon(selected ? destination.selectedIcon : destination.icon, color: color, size: 26),
+                child: Icon(selected ? destination.selectedIcon : destination.icon, color: color, size: 24),
               ),
-              const SizedBox(height: AppSpacing.xxs),
+              const SizedBox(height: 3),
               Text(
                 destination.label,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: context.text.labelSmall?.copyWith(
                   color: color,
+                  fontSize: 10.5,
+                  letterSpacing: 0,
                   fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
                 ),
+              ),
+              const SizedBox(height: 4),
+              // Punto indicador de la sección activa.
+              AnimatedContainer(
+                duration: AppDurations.medium,
+                curve: AppCurves.emphasized,
+                width: selected ? 4 : 0,
+                height: 4,
+                decoration: BoxDecoration(color: color, shape: BoxShape.circle),
               ),
             ],
           ),
@@ -133,13 +175,20 @@ class _AddButton extends StatelessWidget {
           onTap();
         },
         child: Container(
-          width: 54,
-          height: 54,
+          width: 52,
+          height: 52,
           decoration: BoxDecoration(
             color: context.scheme.primary,
-            borderRadius: BorderRadius.circular(AppRadius.lg),
+            shape: BoxShape.circle,
+            boxShadow: [
+              BoxShadow(
+                color: context.scheme.primary.withValues(alpha: 0.35),
+                blurRadius: 16,
+                offset: const Offset(0, 4),
+              ),
+            ],
           ),
-          child: Icon(Icons.add_rounded, size: 30, color: context.scheme.onPrimary),
+          child: Icon(Icons.add_rounded, size: 28, color: context.scheme.onPrimary),
         ),
       ),
     );

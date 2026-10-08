@@ -26,11 +26,14 @@ class MovementRepository {
     isUnexpected: r.isUnexpected,
     incomeSource: r.incomeSource,
     recurringRuleId: r.recurringRuleId,
+    installmentPlanId: r.installmentPlanId,
+    installmentNumber: r.installmentNumber,
   );
 
   static MovementsCompanion toCompanion(Movement m, {bool withId = false}) {
     final note = m.note?.trim();
     final source = m.incomeSource?.trim();
+    final onCard = m.isExpense && m.paymentMethod == PaymentMethod.credit;
     return MovementsCompanion(
       id: withId ? Value(m.id) : const Value.absent(),
       kind: Value(m.kind),
@@ -39,10 +42,12 @@ class MovementRepository {
       date: Value(m.date),
       note: Value(note == null || note.isEmpty ? null : note),
       paymentMethod: Value(m.isExpense ? m.paymentMethod : null),
-      cardId: Value(m.isExpense ? m.cardId : null),
+      cardId: Value(onCard ? m.cardId : null),
       isUnexpected: Value(m.isExpense && m.isUnexpected),
       incomeSource: Value(m.isExpense || source == null || source.isEmpty ? null : source),
       recurringRuleId: Value(m.recurringRuleId),
+      installmentPlanId: Value(m.installmentPlanId),
+      installmentNumber: Value(m.installmentPlanId == null ? null : m.installmentNumber),
     );
   }
 
@@ -60,12 +65,17 @@ class MovementRepository {
           .watch()
           .map((rows) => rows.map(toDomain).toList());
 
-  Stream<List<Movement>> watchRecent({int limit = 5}) =>
-      (_db.select(_t)
-            ..orderBy(_newestFirst)
-            ..limit(limit))
-          .watch()
-          .map((rows) => rows.map(toDomain).toList());
+  /// Los últimos movimientos hasta hoy (sin mensualidades MSI futuras).
+  Stream<List<Movement>> watchRecent({int limit = 5, DateTime? now}) {
+    final n = now ?? DateTime.now();
+    final tomorrow = DateTime(n.year, n.month, n.day + 1);
+    return (_db.select(_t)
+          ..where((m) => m.date.isSmallerThanValue(tomorrow))
+          ..orderBy(_newestFirst)
+          ..limit(limit))
+        .watch()
+        .map((rows) => rows.map(toDomain).toList());
+  }
 
   Future<int> add(Movement m) => _db.into(_t).insert(toCompanion(m));
 
@@ -82,14 +92,19 @@ class MovementRepository {
   /// Vuelve a insertar un movimiento borrado conservando su id.
   Future<void> restore(Movement m) => _db.into(_t).insertOnConflictUpdate(toCompanion(m, withId: true));
 
-  Future<PaymentMethod?> lastPaymentMethod() async {
+  /// Método de pago (y tarjeta) del último gasto capturado a mano.
+  Future<({PaymentMethod method, int? cardId})?> lastPayment() async {
     final row =
         await (_db.select(_t)
-              ..where((m) => m.paymentMethod.isNotNull() & m.recurringRuleId.isNull())
+              ..where(
+                (m) =>
+                    m.paymentMethod.isNotNull() & m.recurringRuleId.isNull() & m.installmentPlanId.isNull(),
+              )
               ..orderBy([(m) => OrderingTerm.desc(m.createdAt), (m) => OrderingTerm.desc(m.id)])
               ..limit(1))
             .getSingleOrNull();
-    return row?.paymentMethod;
+    if (row == null) return null;
+    return (method: row.paymentMethod!, cardId: row.cardId);
   }
 
   /// Fuentes de ingreso usadas antes, las más recientes primero.

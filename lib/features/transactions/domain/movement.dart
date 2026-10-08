@@ -14,7 +14,8 @@ enum MovementKind {
 enum PaymentMethod {
   cash('Efectivo'),
   debit('Débito'),
-  // Se habilita en la Fase 3, cuando el movimiento se ligue a una tarjeta específica.
+
+  /// Siempre ligado a una tarjeta (`cardId`).
   credit('Crédito');
 
   const PaymentMethod(this.label);
@@ -38,11 +39,19 @@ abstract class Movement with _$Movement {
     @Default(false) bool isUnexpected,
     String? incomeSource,
     int? recurringRuleId,
+
+    /// Mensualidad de una compra a MSI (1 = primera).
+    int? installmentPlanId,
+    int? installmentNumber,
   }) = _Movement;
 
   const Movement._();
 
   bool get isExpense => kind == MovementKind.expense;
+
+  bool get isInstallment => installmentPlanId != null;
+
+  bool get isCredit => paymentMethod == PaymentMethod.credit && cardId != null;
 
   /// Monto con signo: negativo para gastos.
   int get signedCents => isExpense ? -amountCents : amountCents;

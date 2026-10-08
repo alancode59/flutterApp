@@ -1,6 +1,10 @@
 import 'package:drift/drift.dart' show driftRuntimeOptions;
 import 'package:drift/native.dart';
 import 'package:finanzas/core/database/app_database.dart';
+import 'package:finanzas/features/cards/data/card_repository.dart';
+import 'package:finanzas/features/cards/domain/card_payment.dart';
+import 'package:finanzas/features/cards/domain/credit_card.dart';
+import 'package:finanzas/features/cards/domain/installment_plan.dart';
 import 'package:finanzas/features/categories/data/category_repository.dart';
 import 'package:finanzas/features/categories/domain/category.dart';
 import 'package:finanzas/features/categories/domain/category_catalog.dart';
@@ -18,12 +22,14 @@ void main() {
   late CategoryRepository categories;
   late MovementRepository movements;
   late RecurringRepository recurring;
+  late CardRepository cards;
 
   setUp(() {
     db = AppDatabase(NativeDatabase.memory());
     categories = CategoryRepository(db);
     movements = MovementRepository(db);
     recurring = RecurringRepository(db);
+    cards = CardRepository(db);
   });
 
   tearDown(() => db.close());
@@ -202,6 +208,113 @@ void main() {
       await recurring.delete(id);
       final list = await movements.watchRecent().first;
       expect(list.single.recurringRuleId, isNull);
+    });
+  });
+
+  group('tarjetas', () {
+    CreditCard oro() => CreditCard(
+      name: ' Oro ',
+      bank: '  ',
+      last4: '1234',
+      limitCents: 3000000,
+      cutoffDay: 15,
+      dueDay: 5,
+      createdAt: DateTime(2026, 9, 1),
+    );
+
+    test('alta, edición y limpieza de campos', () async {
+      final id = await cards.add(oro());
+      await cards.add(oro().copyWith(name: 'Azul'));
+      final list = await cards.watchAll().first;
+      expect(list.map((c) => c.name), ['Oro', 'Azul']);
+      expect(list.first.bank, isNull);
+      await cards.update(list.first.copyWith(cutoffDay: 20));
+      expect((await cards.watchAll().first).firstWhere((c) => c.id == id).cutoffDay, 20);
+    });
+
+    test('se borra si no tiene actividad y se archiva si la tiene', () async {
+      final vacia = await cards.add(oro());
+      expect(await cards.remove(vacia), CardRemoval.deleted);
+
+      final usada = await cards.add(oro());
+      final cat = await categoryId('Súper');
+      await movements.add(
+        Movement(
+          kind: MovementKind.expense,
+          amountCents: 1000,
+          categoryId: cat,
+          date: DateTime(2026, 10, 1),
+          paymentMethod: PaymentMethod.credit,
+          cardId: usada,
+        ),
+      );
+      expect(await cards.remove(usada), CardRemoval.archived);
+      expect((await cards.watchAll().first).single.archived, isTrue);
+    });
+
+    test('solo los gastos con crédito son cargos de la tarjeta', () async {
+      final id = await cards.add(oro());
+      final cat = await categoryId('Súper');
+      await movements.add(expense(cat, 100, DateTime(2026, 10, 1)));
+      await movements.add(
+        Movement(
+          kind: MovementKind.expense,
+          amountCents: 200,
+          categoryId: cat,
+          date: DateTime(2026, 10, 1),
+          paymentMethod: PaymentMethod.credit,
+          cardId: id,
+        ),
+      );
+      // Un método distinto de crédito no conserva la tarjeta.
+      await movements.add(expense(cat, 300, DateTime(2026, 10, 1)).copyWith(cardId: id));
+      final charges = await cards.watchCharges().first;
+      expect(charges.map((m) => m.amountCents), [200]);
+      expect(await movements.lastPayment(), (method: PaymentMethod.debit, cardId: null));
+    });
+
+    test('compra a MSI: una mensualidad por mes, borrar y deshacer', () async {
+      final id = await cards.add(oro());
+      final cat = await categoryId('Hogar');
+      final planId = await cards.addInstallmentPurchase(
+        InstallmentPlan(
+          cardId: id,
+          description: 'Refrigerador',
+          totalCents: 1200000,
+          months: 6,
+          categoryId: cat,
+          purchaseDate: DateTime(2026, 9, 20, 12),
+        ),
+      );
+      final charges = await cards.watchCharges().first;
+      expect(charges.length, 6);
+      expect(charges.every((m) => m.installmentPlanId == planId && m.amountCents == 200000), isTrue);
+      expect(charges.map((m) => m.installmentNumber).toSet(), {1, 2, 3, 4, 5, 6});
+      expect(charges.last.date, DateTime(2026, 9, 20, 12));
+
+      // En la quincena solo aparece la mensualidad de ese mes.
+      final oct = await movements.watchRange(DateRange(DateTime(2026, 10, 16), DateTime(2026, 11))).first;
+      expect(oct.single.amountCents, 200000);
+      // Los últimos movimientos no muestran mensualidades futuras.
+      expect((await movements.watchRecent(now: DateTime(2026, 10, 7)).first).length, 1);
+
+      final deleted = await cards.deletePlan(planId);
+      expect(await cards.watchCharges().first, isEmpty);
+      expect(await cards.watchPlans().first, isEmpty);
+      await cards.restorePlan(deleted!);
+      expect((await cards.watchCharges().first).length, 6);
+      expect((await cards.watchPlans().first).single.description, 'Refrigerador');
+    });
+
+    test('pagos: alta, borrar y deshacer', () async {
+      final id = await cards.add(oro());
+      final pid = await cards.addPayment(
+        CardPayment(cardId: id, amountCents: 50000, date: DateTime(2026, 10, 3)),
+      );
+      final deleted = await cards.deletePayment(pid);
+      expect(await cards.watchPayments().first, isEmpty);
+      await cards.restorePayment(deleted!);
+      expect((await cards.watchPayments().first).single.id, pid);
     });
   });
 }

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
+import '../features/cards/presentation/card_detail_screen.dart';
 import '../features/cards/presentation/cards_screen.dart';
 import '../features/categories/presentation/categories_screen.dart';
 import '../features/dashboard/presentation/dashboard_screen.dart';
@@ -23,6 +24,7 @@ abstract final class AppRoutes {
   static const home = '/inicio';
   static const transactions = '/movimientos';
   static const cards = '/tarjetas';
+  static String cardDetail(int id) => '/tarjetas/$id';
   static const reports = '/analisis';
   static const more = '/mas';
   static const settings = '/mas/ajustes';
@@ -49,7 +51,21 @@ GoRouter router(Ref ref) {
         branches: [
           _branch(AppRoutes.home, const DashboardScreen()),
           _branch(AppRoutes.transactions, const TransactionsScreen()),
-          _branch(AppRoutes.cards, const CardsScreen()),
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: AppRoutes.cards,
+                builder: (_, _) => const CardsScreen(),
+                routes: [
+                  GoRoute(
+                    path: ':id',
+                    builder: (_, state) =>
+                        CardDetailScreen(cardId: int.tryParse(state.pathParameters['id']!) ?? 0),
+                  ),
+                ],
+              ),
+            ],
+          ),
           _branch(AppRoutes.reports, const ReportsScreen()),
         ],
       ),

@@ -4,7 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/theme/app_colors.dart';
 import '../../../app/theme/app_tokens.dart';
-import '../../../core/services/haptics.dart';
+import '../../../core/widgets/sliding_segmented.dart';
 import '../../../core/widgets/async_reveal.dart';
 import '../../../core/widgets/page_scaffold.dart';
 import '../../../core/widgets/section_header.dart';
@@ -41,17 +41,13 @@ class _CategoriesScreenState extends ConsumerState<CategoriesScreen> {
         SliverToBoxAdapter(
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: AppSpacing.page),
-            child: SegmentedButton<MovementKind>(
-              showSelectedIcon: false,
+            child: SlidingSegmented<MovementKind>(
               segments: const [
-                ButtonSegment(value: MovementKind.expense, label: Text('Gastos')),
-                ButtonSegment(value: MovementKind.income, label: Text('Ingresos')),
+                Segment(MovementKind.expense, 'Gastos'),
+                Segment(MovementKind.income, 'Ingresos'),
               ],
-              selected: {_kind},
-              onSelectionChanged: (s) {
-                Haptics.tap();
-                setState(() => _kind = s.first);
-              },
+              selected: _kind,
+              onChanged: (k) => setState(() => _kind = k),
             ),
           ),
         ),

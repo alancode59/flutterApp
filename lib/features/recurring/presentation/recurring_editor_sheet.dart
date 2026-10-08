@@ -7,9 +7,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/theme/app_colors.dart';
 import '../../../app/theme/app_tokens.dart';
+import '../../../core/widgets/sliding_segmented.dart';
 import '../../../core/services/haptics.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../core/widgets/feedback.dart';
+import '../../../core/widgets/filter_pill.dart';
+import '../../cards/domain/credit_card.dart';
+import '../../cards/presentation/card_providers.dart';
 import '../../categories/presentation/category_providers.dart';
 import '../../categories/presentation/widgets/category_avatar.dart';
 import '../../transactions/domain/amount_input.dart';
@@ -52,6 +56,7 @@ class _RecurringEditorState extends ConsumerState<_RecurringEditor> {
   late DateTime _start;
   DateTime? _end;
   PaymentMethod _method = PaymentMethod.debit;
+  int? _cardId;
   bool _saving = false;
 
   bool get _isEditing => widget.editing != null;
@@ -72,6 +77,8 @@ class _RecurringEditorState extends ConsumerState<_RecurringEditor> {
     _start = DateUtils.dateOnly(r?.startDate ?? DateTime.now());
     _end = r?.endDate;
     _method = r?.paymentMethod ?? PaymentMethod.debit;
+    _cardId = _method == PaymentMethod.credit ? r?.cardId : null;
+    if (_method == PaymentMethod.credit && _cardId == null) _method = PaymentMethod.debit;
   }
 
   @override
@@ -112,6 +119,7 @@ class _RecurringEditorState extends ConsumerState<_RecurringEditor> {
       startDate: _start,
       endDate: _end,
       paymentMethod: _isExpense ? _method : null,
+      cardId: _isExpense && _method == PaymentMethod.credit ? _cardId : null,
       incomeSource: _isExpense ? null : _source.text.trim(),
     );
     try {
@@ -187,16 +195,15 @@ class _RecurringEditorState extends ConsumerState<_RecurringEditor> {
               ),
               const SizedBox(height: AppSpacing.md),
               if (!_isEditing) ...[
-                SegmentedButton<MovementKind>(
-                  showSelectedIcon: false,
+                SlidingSegmented<MovementKind>(
                   segments: const [
-                    ButtonSegment(value: MovementKind.expense, label: Text('Gasto')),
-                    ButtonSegment(value: MovementKind.income, label: Text('Ingreso')),
+                    Segment(MovementKind.expense, 'Gasto'),
+                    Segment(MovementKind.income, 'Ingreso'),
                   ],
-                  selected: {_kind},
-                  onSelectionChanged: (s) => setState(() {
-                    _kind = s.first;
-                    _categoryId = null;
+                  selected: _kind,
+                  onChanged: (k) => setState(() {
+                    if (k != _kind) _categoryId = null;
+                    _kind = k;
                   }),
                 ),
                 const SizedBox(height: AppSpacing.md),
@@ -275,14 +282,13 @@ class _RecurringEditorState extends ConsumerState<_RecurringEditor> {
               ),
               const SizedBox(height: AppSpacing.md),
               if (_isExpense)
-                SegmentedButton<PaymentMethod>(
-                  showSelectedIcon: false,
-                  segments: const [
-                    ButtonSegment(value: PaymentMethod.cash, label: Text('Efectivo')),
-                    ButtonSegment(value: PaymentMethod.debit, label: Text('Débito')),
-                  ],
-                  selected: {_method},
-                  onSelectionChanged: (s) => setState(() => _method = s.first),
+                _PaymentPicker(
+                  method: _method,
+                  cardId: _cardId,
+                  onChanged: (method, cardId) => setState(() {
+                    _method = method;
+                    _cardId = cardId;
+                  }),
                 )
               else
                 TextFormField(
@@ -369,6 +375,48 @@ class _Info extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// Efectivo, débito o una tarjeta de crédito específica.
+class _PaymentPicker extends ConsumerWidget {
+  const _PaymentPicker({required this.method, required this.cardId, required this.onChanged});
+
+  final PaymentMethod method;
+  final int? cardId;
+  final void Function(PaymentMethod method, int? cardId) onChanged;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final cards = ref.watch(activeCardsProvider).value ?? const <CreditCard>[];
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Se paga con', style: context.text.labelMedium),
+        const SizedBox(height: AppSpacing.xs),
+        Wrap(
+          spacing: AppSpacing.xs,
+          runSpacing: AppSpacing.xs,
+          children: [
+            for (final m in [PaymentMethod.cash, PaymentMethod.debit])
+              SizedBox(
+                height: 38,
+                child: FilterPill(label: m.label, selected: method == m, onTap: () => onChanged(m, null)),
+              ),
+            for (final c in cards)
+              SizedBox(
+                height: 38,
+                child: FilterPill(
+                  label: c.name,
+                  dotColor: c.color,
+                  selected: method == PaymentMethod.credit && cardId == c.id,
+                  onTap: () => onChanged(PaymentMethod.credit, c.id),
+                ),
+              ),
+          ],
+        ),
+      ],
     );
   }
 }

@@ -1,5 +1,7 @@
 import 'package:intl/intl.dart';
 
+import 'dates.dart';
+
 /// Formateo de montos y fechas en es_MX. Los montos llegan siempre en
 /// centavos (int) para evitar errores de redondeo con double.
 abstract final class Formatters {
@@ -36,4 +38,16 @@ abstract final class Formatters {
 
   /// `octubre 2026`
   static String monthYear(DateTime d) => DateFormat('MMMM y', locale).format(d);
+
+  /// `hoy`, `mañana`, `en 5 días`, `ayer`, `hace 3 días`.
+  static String relativeDays(DateTime target, DateTime today) {
+    final days = daysBetween(today, target);
+    return switch (days) {
+      0 => 'hoy',
+      1 => 'mañana',
+      -1 => 'ayer',
+      > 1 => 'en $days días',
+      _ => 'hace ${-days} días',
+    };
+  }
 }

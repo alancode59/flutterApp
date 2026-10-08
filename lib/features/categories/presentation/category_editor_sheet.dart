@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/theme/app_colors.dart';
 import '../../../app/theme/app_tokens.dart';
+import '../../../core/widgets/sliding_segmented.dart';
 import '../../../core/services/haptics.dart';
 import '../../../core/widgets/feedback.dart';
 import '../../transactions/domain/movement.dart';
@@ -163,14 +164,13 @@ class _CategoryEditorState extends ConsumerState<_CategoryEditor> {
               ),
               const SizedBox(height: AppSpacing.lg),
               if (!_isEditing) ...[
-                SegmentedButton<MovementKind>(
-                  showSelectedIcon: false,
+                SlidingSegmented<MovementKind>(
                   segments: const [
-                    ButtonSegment(value: MovementKind.expense, label: Text('Gasto')),
-                    ButtonSegment(value: MovementKind.income, label: Text('Ingreso')),
+                    Segment(MovementKind.expense, 'Gasto'),
+                    Segment(MovementKind.income, 'Ingreso'),
                   ],
-                  selected: {_kind},
-                  onSelectionChanged: (s) => setState(() => _kind = s.first),
+                  selected: _kind,
+                  onChanged: (k) => setState(() => _kind = k),
                 ),
                 const SizedBox(height: AppSpacing.md),
               ],

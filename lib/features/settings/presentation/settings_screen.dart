@@ -6,7 +6,7 @@ import '../../../app/router.dart';
 import '../../../app/theme/app_colors.dart';
 import '../../../app/theme/app_palette.dart';
 import '../../../app/theme/app_tokens.dart';
-import '../../../core/services/haptics.dart';
+import '../../../core/widgets/sliding_segmented.dart';
 import '../../../core/widgets/page_scaffold.dart';
 import '../../../core/widgets/pressable.dart';
 import '../../../core/widgets/section_header.dart';
@@ -37,30 +37,15 @@ class SettingsScreen extends ConsumerWidget {
         SliverToBoxAdapter(
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: AppSpacing.page),
-            child: SegmentedButton<ThemeMode>(
-              showSelectedIcon: false,
+            child: SlidingSegmented<ThemeMode>(
+              height: 44,
               segments: const [
-                ButtonSegment(
-                  value: ThemeMode.system,
-                  label: Text('Sistema'),
-                  icon: Icon(Icons.brightness_auto_rounded),
-                ),
-                ButtonSegment(
-                  value: ThemeMode.light,
-                  label: Text('Claro'),
-                  icon: Icon(Icons.light_mode_rounded),
-                ),
-                ButtonSegment(
-                  value: ThemeMode.dark,
-                  label: Text('Oscuro'),
-                  icon: Icon(Icons.dark_mode_rounded),
-                ),
+                Segment(ThemeMode.system, 'Sistema', icon: Icons.brightness_auto_rounded),
+                Segment(ThemeMode.light, 'Claro', icon: Icons.light_mode_rounded),
+                Segment(ThemeMode.dark, 'Oscuro', icon: Icons.dark_mode_rounded),
               ],
-              selected: {settings.themeMode},
-              onSelectionChanged: (s) {
-                Haptics.tap();
-                _run(context, () => controller.setThemeMode(s.first));
-              },
+              selected: settings.themeMode,
+              onChanged: (m) => _run(context, () => controller.setThemeMode(m)),
             ),
           ),
         ),
